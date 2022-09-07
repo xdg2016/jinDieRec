@@ -1,3 +1,5 @@
+from distutils.command.install_egg_info import to_filename
+import time
 from PIL import  Image
 import numpy as np
 import cv2
@@ -97,13 +99,22 @@ class PPrecHandle:
         """
         预测
         """
-        preds = self.sess.run(["softmax_5.tmp_0"], {"x": im.astype(np.float32)})
+        t1 = time.time()
+        preds = self.sess.run(["softmax_5.tmp_0"], {"x": im.astype(np.float32)}) # 12ms
+        print("run cost: ",time.time()-t1)
         preds = preds[0]
 
         #pprec 
+        # preds_idx = preds.argmax(axis=2)
+        # preds_prob = preds.max(axis=2)
+        # text = self.decode(preds_idx, preds_prob, is_remove_duplicate=True)[0]
+
+        length  = preds.shape[0]
+        batch = preds.shape[1]
+
         preds_idx = preds.argmax(axis=2)
         preds_prob = preds.max(axis=2)
-        text = self.decode(preds_idx, preds_prob, is_remove_duplicate=True)[0]
+        text = self.decode(preds_idx, preds_prob, is_remove_duplicate=True)
 
         return text
 
@@ -117,25 +128,42 @@ class CRNNHandle:
         """
         预测
         """
+        ts = time.time()
         preds = self.sess.run(["out"], {"input": im.astype(np.float32)})
         preds = preds[0]
+        print("run cost: ",time.time()-ts)
 
         # pytorch crnn
         length  = preds.shape[0]
-        preds = preds.reshape(length,-1)
+        batch = preds.shape[1]
 
-        preds = softmax(preds)
+        if batch > 1:
+            batch_preds = []
+            for i in range(batch):
+                batch_pred = preds[:,i,:]
+                batch_pred = batch_pred.reshape(length,-1)
 
-        # 取出最大索引和概率最大值
-        preds_idxs = preds.argmax(axis=1)
-        preds_probs = preds.max(axis=1)
-        # preds_probs[preds_probs < 0 ] = 0
+                # preds = softmax(preds)
 
-        preds = preds_idxs.reshape(-1)
-        text, prob = converter.decode(preds_idxs,preds_probs, length, raw=False)
+                batch_pred = np.argmax(batch_pred,axis=1)
 
-        return text
+                batch_pred = batch_pred.reshape(-1)
 
+                sim_pred = converter.decode(batch_pred, length, raw=False)
+                batch_preds.append(sim_pred)
+            return batch_preds
+        else:
+            preds = preds.reshape(length,-1)
+
+            # preds = softmax(preds)
+
+            preds = np.argmax(preds,axis=1)
+
+            preds = preds.reshape(-1)
+
+            sim_pred = converter.decode(preds, length, raw=False)
+
+            return sim_pred
 
 if __name__ == "__main__":
     im = Image.open("471594277244_.pic.jpg")

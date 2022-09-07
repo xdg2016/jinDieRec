@@ -46,7 +46,6 @@ def remove_single_line(mask,line_idx,direction = 0 ):
     sub = pos[1:] - pos[0:len(pos)-1]
     seg = np.where(sub > 1)[0]
     seg_len = len(seg)
-    sub2 = list(seg[1:] - seg[0:len(seg)-1]) 
     starts =  [0] + list(seg + 1)
     ends = list(seg) + [len(pos)-1]
     idxs = [[pos[starts[idx]],pos[ends[idx]]] for idx in range(len(starts))]
@@ -73,24 +72,74 @@ def remove_line(mask):
     [remove_single_line(mask,h_,1) for h_ in range(h)]
     return mask
 
+def remove_line2(img,edges):
+    '''
+    删除横竖线
+    '''
+    minLineLength = 10
+    maxLineGap = 5
+    lines = cv2.HoughLinesP(edges, 0.5, np.pi / 180, 50,minLineLength,maxLineGap)
+    min_line_len = 50
+    straight_lines = []
+    # draw_img = img.copy()
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        # 过滤斜线，长度太短的线
+        line_len = 0
+        if x1==x2 and abs(y1-y2) > min_line_len:
+            edges[min(y1,y2):max(y1,y2),x1] = 0 
+            line_len = abs(y1-y2)
+        elif y1 == y2 and abs(x1-x2) > min_line_len:
+            edges[y1,min(x1,x2):max(x1,x2)] = 0 
+            line_len = abs(x1-x2)
+        # if x1 !=x2 and y1!=y2 or line_len < min_line_len:
+        #     continue  
+        if line_len > 0:
+            straight_lines.append(line[0])
+            # cv2.line(draw_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
+    
+    return edges
+
+def dilate(edge):
+    idxs = np.where(edge > 0)
+    h,w = edge.shape
+    ys = idxs[0]
+    xs = idxs[1] 
+    ys_up = ys -1
+    ys_down = ys + 1 
+    ys_up[ys_up <0] = 0
+    ys_down[ys_down>=h] = h-1
+    edge[(ys_up,xs)] = 1
+    edge[(ys_down,xs)] = 1
+    return edge
+
 def get_item_boxs(img):
     '''
     获取元素框，包括文字和图标
     '''
     t1 = time.time()
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    # gray = cv2.blur(gray, (3,3))#模糊降噪
+    # gray = cv2.medianBlur(gray, 3)#模糊降噪
     edges = sobel(gray)
+    
     h,w = edges.shape
     t2 = time.time()
     print("sobel cost: ",t2-t1)
-    edges = remove_line(edges)
+    for i in range(1):
+        # edges = remove_line2(img,edges)
+        edges = remove_line(edges)
     t3 = time.time()
     print("remove line cost: ",t3-t2)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(3,3))
+    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
     # edges = cv2.dilate(edges,kernel)
     # kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
     # edges = cv2.erode(edges,kernel)
-    edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel,iterations=1)
+    # edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel,iterations=1)
+
+    # 上下各扩一像素
+    edges = dilate(edges)
+
     ed = 5
     edges[:ed,:] = 0
     edges[h-ed:,:] = 0
@@ -102,7 +151,7 @@ def get_item_boxs(img):
     t5 = time.time()
     print("find contours cost: ",t5-t4)
     # draw_img = img.copy()
-    # draw_img2 = img.copy()
+    draw_img2 = img.copy()
     boxes = []
     for contour in contours:
         (x, y, bb_w, bb_h) = cv2.boundingRect(contour)
@@ -112,15 +161,18 @@ def get_item_boxs(img):
         box = (x, y, bb_w, bb_h)
         boxes.append(box)
         # cv2.drawContours(draw_img,[contour],-1,(0,255,0),2)
-        # cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),255,1)
+        cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
     print("get rect cost: ",time.time() - t1)
+    # cv2.imshow("result",draw_img2)
+    # cv2.waitKey(0)
     return boxes
 
 if __name__ == "__main__":
     
     data_home = "F:/Datasets/securety/页面识别/jindie/image1"
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
-    ocr_handle = model.OcrHandle("models/pprec.onnx",48)
+    # ocr_handle = model.OcrHandle("models/pprec.onnx",48,32)
+    ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,1)
     for item in imgs:
         image_path = os.path.join(data_home,item)
         img = np.array(Image.open(image_path).convert("RGB"))[:,:,::-1]    # 直接转RGB
@@ -138,20 +190,10 @@ if __name__ == "__main__":
         icos = []
         texts = []
         score_th = 0.8
-        for box in boxes:
-            x,y,bb_w,bb_h = box
-            ROI = img[y:y+bb_h,x:x+bb_w]
-            t2 = time.time()
-            result = ocr_handle.PPRecWithBox(np.array(ROI))
-            print("OCR cost: ",time.time()-t2)
-            text = result[0]
-            score = result[1]
-            if score > score_th:
-                texts.append([text,box,score])
-                cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,255,0),1)
-            else:
-                icos.append(box)
-                cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
-        cv2.imshow("show", draw_img2)
-        cv2.waitKey(0)
+        t2 = time.time()
+        # results = ocr_handle.PPRecWithBox(np.array(img),boxes)
+        results = ocr_handle.crnnRecWithBox(np.array(img),boxes)
+        print("OCR cost: ",time.time()-t2)
+        # cv2.imshow("show", draw_img2)
+        # cv2.waitKey(0)
         print()

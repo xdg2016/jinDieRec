@@ -150,6 +150,8 @@ def get_rotate_crop_image(img, points):
     top = int(np.min(points[:, 1]))
     bottom = int(np.max(points[:, 1]))
     img_crop = img[top:bottom, left:right, :].copy()
+    dst_img = img_crop
+    return dst_img
     points[:, 0] = points[:, 0] - left
     points[:, 1] = points[:, 1] - top
     img_crop_width = int(np.linalg.norm(points[0] - points[1]))
