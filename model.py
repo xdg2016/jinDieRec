@@ -41,11 +41,17 @@ class  OcrHandle(object):
         return transformed_image
 
     def cutbox(self,img):
+        '''
+        将box裁小一圈
+        '''
         delta = 3
         h,w = img.shape[:2]
         return img[delta:h-delta,delta:w-delta]
     
     def npbox2box(self,npbox):
+        '''
+        numpy格式转列表格式
+        '''
         return npbox[0][0],npbox[0][1],npbox[3][0],npbox[3][1]
 
 
@@ -92,13 +98,19 @@ class  OcrHandle(object):
             for box in boxes_list:
                 tmp_box = copy.deepcopy(box)
                 x,y,bb_w,bb_h = box 
+                # box外扩
+                delta = 1
+                x -= delta
+                y -= delta 
+                bb_w += 2*delta
+                bb_h += 2*delta
                 box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
                 partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
                 # partImg_array = self.cutbox(partImg_array)
                 # cv2.imwrite(f"tmp/{img_num}.png",partImg_array)
                 img_num += 1
                 h,w ,c = partImg_array.shape
-                if h < 1 or w/h < 1.5 :
+                if h < 1 or h/w > 2 :
                     continue 
                 box_lists.append(box)
                 width_list.append(w / h)

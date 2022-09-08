@@ -34,15 +34,18 @@ def sobel(img,thresh = 10):
     edges = cv2.threshold(grad,thresh,255,cv2.THRESH_BINARY)[1]/255
     return edges.astype(np.uint8)
 
-def remove_single_line(mask,line_idx,direction = 0 ):
-    
+def remove_single_line(mask,line_idx,direction = 0,len_th = 50):
+    '''
+    去除某一行或列中的长线段
+    '''
+    h,w = mask.shape
     idxs = []
     if direction == 0:      # 竖线
         pos = np.where(mask[:,line_idx] > 0)[0]
     else:
         pos = np.where(mask[line_idx,:] > 0)[0]
     if len(pos) == 0:
-        return 
+        return mask
     sub = pos[1:] - pos[0:len(pos)-1]
     seg = np.where(sub > 1)[0]
     seg_len = len(seg)
@@ -51,19 +54,28 @@ def remove_single_line(mask,line_idx,direction = 0 ):
     idxs = [[pos[starts[idx]],pos[ends[idx]]] for idx in range(len(starts))]
     idxs = sum(idxs,[])
 
-    len_th = 50
     for i in range(0,len(idxs),2):
         seg_len = idxs[i+1]-idxs[i]
         if  seg_len > len_th:
             if direction == 0:
                 mask[idxs[i]:idxs[i+1],line_idx] = 0
+                # 判断左右两列是否也是线段
+                if idxs[i] > 0 and idxs[i+1] < h-1 and mask[idxs[i]:idxs[i+1],line_idx-1].sum() == seg_len and mask[idxs[i]-1,line_idx-1] == 0 and mask[idxs[i+1]+1,line_idx-1] == 0:
+                    mask[idxs[i]:idxs[i+1],line_idx-1] = 0
+                if idxs[i] > 0 and idxs[i+1] < h-1 and mask[idxs[i]:idxs[i+1],line_idx+1].sum() == seg_len and mask[idxs[i]-1,line_idx+1] == 0 and mask[idxs[i+1]+1,line_idx+1] == 0:
+                    mask[idxs[i]:idxs[i+1],line_idx+1] = 0
             else:
                 mask[line_idx,idxs[i]:idxs[i+1]] = 0
+                # 判断上下两行是否也是线段
+                if idxs[i] > 0 and idxs[i+1] < w-1 and mask[line_idx-1,idxs[i]:idxs[i+1]].sum() == seg_len and mask[line_idx-1, idxs[i]-1] == 0 and mask[line_idx-1, idxs[i+1]+1] == 0:
+                    mask[line_idx-1, idxs[i]:idxs[i+1]] = 0
+                if idxs[i] > 0 and idxs[i+1] < w-1 and mask[line_idx+1,idxs[i]:idxs[i+1]].sum() == seg_len and mask[line_idx+1, idxs[i]-1] == 0 and mask[line_idx+1, idxs[i+1]+1] == 0:
+                    mask[line_idx+1, idxs[i]:idxs[i+1]] = 0
     return mask
 
 def remove_line(mask):
     '''
-    去除长线
+    删除横竖线,使用numpy数组判断
     '''
     h,w = mask.shape
     # 去除竖线
@@ -74,7 +86,7 @@ def remove_line(mask):
 
 def remove_line2(img,edges):
     '''
-    删除横竖线
+    删除横竖线,使用opencv的霍夫直线检测
     '''
     h,w = edges.shape
     draw_img = img.copy()
@@ -113,28 +125,51 @@ def remove_line2(img,edges):
         y1  = min(h-1, max(0,int(y0  +  L*(a))))
         x2  = min(w-1, max(0,int(x0  -  L*(-b))))
         y2  = min(h-1, max(0,int(y0  -  L*(a))))
-        print( (x1, y1), (x2, y2))
+        # print( (x1, y1), (x2, y2))
         cv2.line(draw_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
-        if theta == 0: # 水平
-            edges = remove_single_line(edges,x1,0)
+        if theta == 0: # 竖直
+            edges = remove_single_line(edges,x1,0,15)
         else:
-            edges = remove_single_line(edges,y1,1)
+            edges = remove_single_line(edges,y1,1,15)
 
 
     return edges
 
-def dilate(edge):
+def dilate(edge,direc = 0,delta=1):
+    '''
+    上下各膨胀delta个像素
+    '''
     idxs = np.where(edge > 0)
     h,w = edge.shape
     ys = idxs[0]
     xs = idxs[1] 
-    ys_up = ys -1
-    ys_down = ys + 1 
-    ys_up[ys_up <0] = 0
-    ys_down[ys_down>=h] = h-1
-    edge[(ys_up,xs)] = 1
-    edge[(ys_down,xs)] = 1
+    if direc == 0:                       # 上下
+        ys_up = ys -delta
+        ys_down = ys + delta 
+        ys_up[ys_up < 0] = 0
+        ys_down[ys_down >= h] = h-1
+        edge[(ys_up,xs)] = 1
+        edge[(ys_down,xs)] = 1
+    else:                                # 左右
+        xs_left = xs -delta
+        xs_right = xs + delta 
+        xs_left[xs_left < 0] = 0
+        xs_right[xs_right >= w] = w-1
+        edge[(ys,xs_left)] = 1
+        edge[(ys,xs_right)] = 1
     return edge
+
+def remove_edge_line(mask,ed=5):
+    '''
+    去除图像边缘线
+    '''
+    h,w = mask.shape
+    ed = 5
+    mask[:ed,:] = 0
+    mask[h-ed:,:] = 0
+    mask[:,:ed] = 0
+    mask[:,w-ed:] = 0
+    return mask
 
 def get_item_boxs(img):
     '''
@@ -149,11 +184,13 @@ def get_item_boxs(img):
     h,w = edges.shape
     t2 = time.time()
     print("sobel cost: ",t2-t1)
-    for i in range(1):
-        # edges = remove_line2(img,edges)
+    for i in range(2):
+        # edges = remove_line(edges)
         edges = remove_line2(img,edges)
     t3 = time.time()
     print("remove line cost: ",t3-t2)
+    
+    # 闭运算
     kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
     # edges = cv2.dilate(edges,kernel)
     # kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
@@ -162,48 +199,50 @@ def get_item_boxs(img):
 
     # 上下各扩一像素
     edges = dilate(edges)
+    # 去除图像边缘线条
+    edges = remove_edge_line(edges)
 
-    ed = 5
-    edges[:ed,:] = 0
-    edges[h-ed:,:] = 0
-    edges[:,:ed] = 0
-    edges[:,w-ed:] = 0
     t4 = time.time()
-    print("morphology close cost: ",t4-t3)
     contours,hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     t5 = time.time()
-    print("find contours cost: ",t5-t4)
-    draw_img2 = img.copy()
+    # draw_img2 = img.copy()
     boxes = []
     for contour in contours:
         (x, y, bb_w, bb_h) = cv2.boundingRect(contour)
-        whr_th = 1.5
-        if bb_h > 80 or bb_h < 3 or bb_w < 3 or bb_h/bb_w > whr_th :
+        whr_th = 2
+        area_th = 5*5
+        if bb_h > 80 or bb_h < 3 or bb_w < 2 or bb_h/bb_w > whr_th or bb_w * bb_h < area_th :
             continue
         box = (x, y, bb_w, bb_h)
         boxes.append(box)
         # cv2.drawContours(draw_img,[contour],-1,(0,255,0),2)
-        cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
+        # cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
     print("get rect cost: ",time.time() - t1)
-    cv2.imshow("result",draw_img2)
-    cv2.waitKey(0)
+    # cv2.imshow("result",draw_img2)
+    # cv2.waitKey(0)
     return boxes
 
 if __name__ == "__main__":
     
     data_home = "F:/Datasets/securety/页面识别/jindie/image1"
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
+    
+    # 初始化OCR模型
     # ocr_handle = model.OcrHandle("models/pprec.onnx",48,32)
-    ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,8)
+    ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,16)
+    
     for item in imgs:
+        print("#"*200)
+        print(item)
         image_path = os.path.join(data_home,item)
         img = np.array(Image.open(image_path).convert("RGB"))[:,:,::-1]    # 直接转RGB
         ori_h,ori_w = img.shape[:2]
         r = 1
-        img = cv2.resize(img,(int(ori_w*r),int(ori_h*r)),cv2.INTER_LANCZOS4)
+        if r != 1:
+            img = cv2.resize(img,(int(ori_w*r),int(ori_h*r)),cv2.INTER_LANCZOS4)
         t1 = time.time() 
         
-        # 获取所有的元素
+        # 获取所有的元素位置（文本+图标）
         boxes = get_item_boxs(img)
         draw_img2 = img.copy()
         results = []
@@ -212,9 +251,12 @@ if __name__ == "__main__":
         # 置信度阈值
         score_th = 0.8
         t2 = time.time()
+
+        # 调用OCR识别
         # results = ocr_handle.PPRecWithBox(np.array(img),boxes)
         results = ocr_handle.crnnRecWithBox(np.array(img),boxes)
         print("OCR cost: ",time.time()-t2)
+
         for result in results:
             box,text,prob = result
             if prob > score_th:
@@ -225,4 +267,5 @@ if __name__ == "__main__":
                 cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),1)
         cv2.imshow("result",draw_img2)
         cv2.waitKey(0)
-        print()
+        # cv2.imwrite(f"result/{item}",draw_img2)
+        print("total cost: ",time.time()-t1)
