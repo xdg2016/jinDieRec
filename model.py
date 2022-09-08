@@ -44,6 +44,9 @@ class  OcrHandle(object):
         delta = 3
         h,w = img.shape[:2]
         return img[delta:h-delta,delta:w-delta]
+    
+    def npbox2box(self,npbox):
+        return npbox[0][0],npbox[0][1],npbox[3][0],npbox[3][1]
 
 
     def crnnRecWithBox(self,im,boxes_list):
@@ -67,19 +70,19 @@ class  OcrHandle(object):
         count = 1
         if self.batch_num == 1:
             for box in boxes_list:
+                tmp_box = copy.deepcopy(box)
                 x,y,bb_w,bb_h = box 
                 box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
                 # 裁剪
                 partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
                 partImg = self.preprocess(partImg_array.astype(np.float32))
                 try:
-                    simPred = self.crnn_handle.predict_rbg(partImg)  ##识别的文本
+                    simPred,prob = self.crnn_handle.predict_rbg(partImg)  ##识别的文本
                 except Exception as e:
                     print(traceback.format_exc())
                     continue
-                if simPred.strip() != '':
-                    results.append([box,"{}、 ".format(count)+  simPred])
-                    count += 1
+                results.append([self.npbox2box(box),simPred,prob])
+                count += 1
         else:
             # # 批量测试
             width_list = []
@@ -87,14 +90,15 @@ class  OcrHandle(object):
             box_lists =[]
             img_num = 0
             for box in boxes_list:
+                tmp_box = copy.deepcopy(box)
                 x,y,bb_w,bb_h = box 
                 box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
                 partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
                 # partImg_array = self.cutbox(partImg_array)
-                cv2.imwrite(f"tmp/{img_num}.png",partImg_array)
+                # cv2.imwrite(f"tmp/{img_num}.png",partImg_array)
                 img_num += 1
                 h,w ,c = partImg_array.shape
-                if h<1 or w/h < 1.5 :
+                if h < 1 or w/h < 1.5 :
                     continue 
                 box_lists.append(box)
                 width_list.append(w / h)
@@ -110,22 +114,8 @@ class  OcrHandle(object):
                 end_img_no = min(box_num, beg_img_no + self.batch_num)
                 norm_img_batch = []
                 batch_boxes = boxes_list[beg_img_no:end_img_no]
-
-                max_wh_ratio = 0
-                for ino in range(beg_img_no, end_img_no):
-                    box = boxImgs_list[ino]
-                    h,w,c = box.shape
-                    wh_ratio = w * 1.0 / h
-                    max_wh_ratio = max(max_wh_ratio, wh_ratio)
-
-                for ino in range(beg_img_no, end_img_no):
-                    partImg = boxImgs_list[ino]
-                    # if angle_detect and angle_res:
-                    #     partImg = partImg.rotate(180)
-
-                    partImg = self.preprocess(partImg,max_wh_ratio)
-                    norm_img_batch.append(partImg)
-
+                max_wh_ratio = max([box.shape[1]/box.shape[0] for box in boxImgs_list[beg_img_no:end_img_no]])
+                norm_img_batch = [self.preprocess(partImg,max_wh_ratio) for partImg in boxImgs_list[beg_img_no:end_img_no]]
                 partImg = np.concatenate(norm_img_batch)
 
                 try:
@@ -138,9 +128,8 @@ class  OcrHandle(object):
                 if end_img_no % self.batch_num > 0:
                     pred_num = end_img_no % self.batch_num
                 for i in range(pred_num):
-                    if simPred[i].strip() != '':
-                        results.append([batch_boxes[i],"{}、 ".format(count)+  simPred[i]])
-                        count += 1   
+                    results.append([self.npbox2box(batch_boxes[i]),simPred[i][0],simPred[i][1]])
+                    count += 1   
 
         return results
 
@@ -213,11 +202,7 @@ class  OcrHandle(object):
                 max_wh_ratio = max([box.shape[1]/box.shape[0] for box in boxImgs_list[beg_img_no:end_img_no]])
                 t5 = time.time()
                 print("求最大宽高比耗时：",t5-t4)
-
-                for ino in range(beg_img_no, end_img_no):
-                    partImg = boxImgs_list[ino]
-                    partImg = self.preprocess(partImg,max_wh_ratio)
-                    norm_img_batch.append(partImg)
+                norm_img_batch = [self.preprocess(partImg,max_wh_ratio) for partImg in boxImgs_list[beg_img_no:end_img_no]]
                 t6 = time.time()
                 print("预处理耗时: ",t6-t5)
                 partImg = np.concatenate(norm_img_batch)

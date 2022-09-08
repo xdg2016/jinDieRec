@@ -23,8 +23,8 @@ def sobel(img,thresh = 10):
     # grad_X = cv2.Scharr(img,cv2.CV_64F,1,0)
     # grad_Y = cv2.Scharr(img,cv2.CV_64F,0,1)
 
-    grad_X = cv2.Sobel(img,cv2.CV_64F,1,0,ksize=3)
-    grad_Y = cv2.Sobel(img,cv2.CV_64F,0,1,ksize=3)
+    grad_X = cv2.Sobel(img,-1,1,0,ksize=3) # cv2.CV_64F
+    grad_Y = cv2.Sobel(img,-1,0,1,ksize=3)
 
     grad_X = cv2.convertScaleAbs(grad_X)      
     grad_Y = cv2.convertScaleAbs(grad_Y)
@@ -76,28 +76,51 @@ def remove_line2(img,edges):
     '''
     删除横竖线
     '''
-    minLineLength = 10
-    maxLineGap = 5
-    lines = cv2.HoughLinesP(edges, 0.5, np.pi / 180, 50,minLineLength,maxLineGap)
-    min_line_len = 50
-    straight_lines = []
-    # draw_img = img.copy()
-    for line in lines:
-        x1, y1, x2, y2 = line[0]
-        # 过滤斜线，长度太短的线
-        line_len = 0
-        if x1==x2 and abs(y1-y2) > min_line_len:
-            edges[min(y1,y2):max(y1,y2),x1] = 0 
-            line_len = abs(y1-y2)
-        elif y1 == y2 and abs(x1-x2) > min_line_len:
-            edges[y1,min(x1,x2):max(x1,x2)] = 0 
-            line_len = abs(x1-x2)
-        # if x1 !=x2 and y1!=y2 or line_len < min_line_len:
-        #     continue  
-        if line_len > 0:
-            straight_lines.append(line[0])
-            # cv2.line(draw_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
+    h,w = edges.shape
+    draw_img = img.copy()
+    # minLineLength = 20
+    # maxLineGap = 5
+    # lines = cv2.HoughLinesP(edges, 0.5, np.pi / 2, 10 ,minLineLength,maxLineGap)
+    # min_line_len = 20
+    # straight_lines = []
     
+    # for line in lines:
+    #     x1, y1, x2, y2 = line[0]
+    #     # 过滤斜线，长度太短的线
+    #     line_len = 0
+    #     if x1==x2 and abs(y1-y2) > min_line_len:
+    #         edges[min(y1,y2):max(y1,y2),x1] = 0 
+    #         line_len = abs(y1-y2)
+    #     elif y1 == y2 and abs(x1-x2) > min_line_len:
+    #         edges[y1,min(x1,x2):max(x1,x2)] = 0 
+    #         line_len = abs(x1-x2)
+    #     if x1 !=x2 and y1!=y2 or line_len < min_line_len:
+    #         continue  
+    #     if line_len > 0:
+    #         straight_lines.append(line[0])
+    #     cv2.line(draw_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
+    
+    lines  =  cv2.HoughLines(edges,1,np.pi/2,100)
+    L = 1500
+    for line in  lines:
+        rho,theta = line[0]
+        # 强制转成横和竖线
+        a  =  0 if theta > 0 else 1
+        b  =  1 if theta > 0 else 0
+        x0  =  a*rho
+        y0  =  b*rho
+        x1  = min(w-1, max(0,int(x0  +  L*(-b))))
+        y1  = min(h-1, max(0,int(y0  +  L*(a))))
+        x2  = min(w-1, max(0,int(x0  -  L*(-b))))
+        y2  = min(h-1, max(0,int(y0  -  L*(a))))
+        print( (x1, y1), (x2, y2))
+        cv2.line(draw_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
+        if theta == 0: # 水平
+            edges = remove_single_line(edges,x1,0)
+        else:
+            edges = remove_single_line(edges,y1,1)
+
+
     return edges
 
 def dilate(edge):
@@ -121,7 +144,7 @@ def get_item_boxs(img):
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
     # gray = cv2.blur(gray, (3,3))#模糊降噪
     # gray = cv2.medianBlur(gray, 3)#模糊降噪
-    edges = sobel(gray)
+    edges = sobel(gray,20)
     
     h,w = edges.shape
     t2 = time.time()
@@ -163,8 +186,8 @@ def get_item_boxs(img):
         # cv2.drawContours(draw_img,[contour],-1,(0,255,0),2)
         cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
     print("get rect cost: ",time.time() - t1)
-    # cv2.imshow("result",draw_img2)
-    # cv2.waitKey(0)
+    cv2.imshow("result",draw_img2)
+    cv2.waitKey(0)
     return boxes
 
 if __name__ == "__main__":
@@ -172,7 +195,7 @@ if __name__ == "__main__":
     data_home = "F:/Datasets/securety/页面识别/jindie/image1"
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
     # ocr_handle = model.OcrHandle("models/pprec.onnx",48,32)
-    ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,1)
+    ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,8)
     for item in imgs:
         image_path = os.path.join(data_home,item)
         img = np.array(Image.open(image_path).convert("RGB"))[:,:,::-1]    # 直接转RGB
@@ -180,11 +203,9 @@ if __name__ == "__main__":
         r = 1
         img = cv2.resize(img,(int(ori_w*r),int(ori_h*r)),cv2.INTER_LANCZOS4)
         t1 = time.time() 
+        
+        # 获取所有的元素
         boxes = get_item_boxs(img)
-        # 调用OCR做识别
-        # result_image_path = os.path.join(data_home+"_result",os.path.splitext(item)[0]+".png")
-        # res = infer(img,result_image_path)
-        # print("OCR cost:",time.time()-t1)
         draw_img2 = img.copy()
         results = []
         icos = []
@@ -196,4 +217,14 @@ if __name__ == "__main__":
         print("OCR cost: ",time.time()-t2)
         # cv2.imshow("show", draw_img2)
         # cv2.waitKey(0)
+        for result in results:
+            box,text,prob = result
+            if prob > score_th:
+                texts.append(result)
+                cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(0,0,255),1)
+            else:
+                icos.append(result)
+                cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),1)
+        cv2.imshow("result",draw_img2)
+        cv2.waitKey(0)
         print()

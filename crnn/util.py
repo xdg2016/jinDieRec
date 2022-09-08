@@ -2,6 +2,7 @@
 # encoding: utf-8
 
 
+from cmath import isnan
 import collections
 from PIL import Image
 import numpy as np
@@ -52,18 +53,18 @@ class strLabelConverter(object):
             self.dict[char] = i + 1
 
     
-    def decode(self, t, length, raw=False):
+    def decode(self, t,tb, length, raw=False):
         t = t[:length]
         if raw:
             return ''.join([self.alphabet[i - 1] for i in t])
         else:
             char_list = []
+            prob_list = []
             for i in range(length):
-
                 if t[i] != 0 and (not (i > 0 and t[i - 1] == t[i])):
                     char_list.append(self.alphabet[t[i] - 1])
-            return ''.join(char_list)
-
+                    prob_list.append(tb[i])
+            return ''.join(char_list), 0 if np.isnan(np.mean(prob_list)) else np.mean(prob_list)
 
 
 class averager(object):

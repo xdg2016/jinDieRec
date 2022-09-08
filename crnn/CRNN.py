@@ -101,7 +101,6 @@ class PPrecHandle:
         """
         t1 = time.time()
         preds = self.sess.run(["softmax_5.tmp_0"], {"x": im.astype(np.float32)}) # 12ms
-        print("run cost: ",time.time()-t1)
         preds = preds[0]
 
         #pprec 
@@ -128,10 +127,8 @@ class CRNNHandle:
         """
         预测
         """
-        ts = time.time()
         preds = self.sess.run(["out"], {"input": im.astype(np.float32)})
         preds = preds[0]
-        print("run cost: ",time.time()-ts)
 
         # pytorch crnn
         length  = preds.shape[0]
@@ -140,30 +137,27 @@ class CRNNHandle:
         if batch > 1:
             batch_preds = []
             for i in range(batch):
-                batch_pred = preds[:,i,:]
-                batch_pred = batch_pred.reshape(length,-1)
+                batch_pred = preds[:,i,:].reshape(length,-1)
+                batch_pred = softmax(batch_pred)
 
-                # preds = softmax(preds)
-
-                batch_pred = np.argmax(batch_pred,axis=1)
-
-                batch_pred = batch_pred.reshape(-1)
-
-                sim_pred = converter.decode(batch_pred, length, raw=False)
-                batch_preds.append(sim_pred)
+                # 取出最大索引和概率最大值
+                preds_idxs = batch_pred.argmax(axis=1)
+                preds_probs = batch_pred.max(axis=1)
+                
+                text, prob = converter.decode(preds_idxs,preds_probs, length, raw=False)
+                batch_preds.append((text,prob))
             return batch_preds
         else:
             preds = preds.reshape(length,-1)
+            preds = softmax(preds)
 
-            # preds = softmax(preds)
+            # 取出最大索引和概率最大值
+            preds_idxs = preds.argmax(axis=1)
+            preds_probs = preds.max(axis=1)
+        
+            text, prob = converter.decode(preds_idxs,preds_probs, length, raw=False)
 
-            preds = np.argmax(preds,axis=1)
-
-            preds = preds.reshape(-1)
-
-            sim_pred = converter.decode(preds, length, raw=False)
-
-            return sim_pred
+            return [(text, prob)] 
 
 if __name__ == "__main__":
     im = Image.open("471594277244_.pic.jpg")
