@@ -144,14 +144,14 @@ def get_item_boxs(img):
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
     # gray = cv2.blur(gray, (3,3))#模糊降噪
     # gray = cv2.medianBlur(gray, 3)#模糊降噪
-    edges = sobel(gray,20)
+    edges = sobel(gray)
     
     h,w = edges.shape
     t2 = time.time()
     print("sobel cost: ",t2-t1)
     for i in range(1):
         # edges = remove_line2(img,edges)
-        edges = remove_line(edges)
+        edges = remove_line2(img,edges)
     t3 = time.time()
     print("remove line cost: ",t3-t2)
     kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
@@ -173,7 +173,6 @@ def get_item_boxs(img):
     contours,hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     t5 = time.time()
     print("find contours cost: ",t5-t4)
-    # draw_img = img.copy()
     draw_img2 = img.copy()
     boxes = []
     for contour in contours:
@@ -210,13 +209,12 @@ if __name__ == "__main__":
         results = []
         icos = []
         texts = []
+        # 置信度阈值
         score_th = 0.8
         t2 = time.time()
         # results = ocr_handle.PPRecWithBox(np.array(img),boxes)
         results = ocr_handle.crnnRecWithBox(np.array(img),boxes)
         print("OCR cost: ",time.time()-t2)
-        # cv2.imshow("show", draw_img2)
-        # cv2.waitKey(0)
         for result in results:
             box,text,prob = result
             if prob > score_th:
