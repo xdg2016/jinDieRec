@@ -23,13 +23,16 @@ def sobel(img,thresh = 10):
     # grad_X = cv2.Scharr(img,cv2.CV_64F,1,0)
     # grad_Y = cv2.Scharr(img,cv2.CV_64F,0,1)
 
-    grad_X = cv2.Sobel(img,-1,1,0,ksize=3) # cv2.CV_64F
-    grad_Y = cv2.Sobel(img,-1,0,1,ksize=3)
+    # grad_X = cv2.Sobel(img,-1,1,0,ksize=3) # cv2.CV_64F
+    # grad_Y = cv2.Sobel(img,-1,0,1,ksize=3)
+
+    grad_X = cv2.Sobel(img,cv2.CV_64F,1,0,ksize=3) # cv2.CV_64F
+    grad_Y = cv2.Sobel(img,cv2.CV_64F,0,1,ksize=3)
 
     grad_X = cv2.convertScaleAbs(grad_X)      
     grad_Y = cv2.convertScaleAbs(grad_Y)
     
-    #求梯度图像
+    # #求梯度图像
     grad = cv2.addWeighted(grad_X,0.5,grad_Y,0.5,0)
     edges = cv2.threshold(grad,thresh,255,cv2.THRESH_BINARY)[1]/255
     return edges.astype(np.uint8)
@@ -57,7 +60,7 @@ def remove_single_line(mask,line_idx,direction = 0,len_th = 50):
     for i in range(0,len(idxs),2):
         seg_len = idxs[i+1]-idxs[i]
         if  seg_len > len_th:
-            if direction == 0:
+            if direction == 0 :
                 mask[idxs[i]:idxs[i+1],line_idx] = 0
                 # 判断左右两列是否也是线段
                 if idxs[i] > 0 and idxs[i+1] < h-1 and mask[idxs[i]:idxs[i+1],line_idx-1].sum() == seg_len and mask[idxs[i]-1,line_idx-1] == 0 and mask[idxs[i+1]+1,line_idx-1] == 0:
@@ -92,7 +95,7 @@ def remove_line2(img,edges):
     draw_img = img.copy()
     # minLineLength = 20
     # maxLineGap = 5
-    # lines = cv2.HoughLinesP(edges, 0.5, np.pi / 2, 10 ,minLineLength,maxLineGap)
+    # lines = cv2.HoughLinesP(edges, 0.5, np.pi / 2, 10 ,minLineLength,maxLineGap)      # 概率直线检测
     # min_line_len = 20
     # straight_lines = []
     
@@ -112,8 +115,12 @@ def remove_line2(img,edges):
     #         straight_lines.append(line[0])
     #     cv2.line(draw_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
     
-    lines  =  cv2.HoughLines(edges,1,np.pi/2,100)
+    edges[:,np.sum(edges,axis=0) == h] = 0
+    edges[np.sum(edges,axis=1) == w,:] = 0
+
+    lines  =  cv2.HoughLines(edges,1,np.pi/2,50)
     L = 1500
+    min_len = 50
     for line in  lines:
         rho,theta = line[0]
         # 强制转成横和竖线
@@ -128,10 +135,9 @@ def remove_line2(img,edges):
         # print( (x1, y1), (x2, y2))
         cv2.line(draw_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
         if theta == 0: # 竖直
-            edges = remove_single_line(edges,x1,0,15)
+            edges = remove_single_line(edges,x1,0,min_len)
         else:
-            edges = remove_single_line(edges,y1,1,15)
-
+            edges = remove_single_line(edges,y1,1,min_len)
 
     return edges
 
@@ -171,52 +177,79 @@ def remove_edge_line(mask,ed=5):
     mask[:,w-ed:] = 0
     return mask
 
+def remove_connectRegion(mask_):
+    '''
+    删除连通域
+    '''
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_, connectivity=4)
+    h,w = mask_.shape
+    print()
+    for i in range(1,num_labels):
+        label_width = stats[i][2]
+        label_height = stats[i][3]
+        label_x = stats[i][0]
+        label_y = stats[i][1]
+        label = labels[label_y:label_y + label_height, label_x:label_x + label_width]  # 获取label外接矩形
+        label_mask = (label == i).astype(np.uint8)
+        area_rth = 0.3
+        area =  label_width*label_height
+        area_r = label_mask.sum() / area
+        if  (area_r < area_rth or area_r ==1) and (area > 50*50 or label_height > h/2 or label_width > w/2 ):
+            mask_[labels==i] = 0            # 将该轮廓置零
+    
+    return mask_
+   
+
 def get_item_boxs(img):
     '''
     获取元素框，包括文字和图标
     '''
+    draw_img2 = img.copy()
     t1 = time.time()
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    # gray = cv2.blur(gray, (3,3))#模糊降噪
-    # gray = cv2.medianBlur(gray, 3)#模糊降噪
-    edges = sobel(gray)
-    
+ 
+    edges = sobel(gray,10)
     h,w = edges.shape
+
+    # 连通域检测和去除
+    edges = remove_connectRegion(edges)
+
     t2 = time.time()
     print("sobel cost: ",t2-t1)
-    for i in range(2):
-        # edges = remove_line(edges)
-        edges = remove_line2(img,edges)
+    # for i in range(2):
+    #     # edges = remove_line(edges)
+    #     edges = remove_line2(img,edges)
     t3 = time.time()
     print("remove line cost: ",t3-t2)
     
     # 闭运算
-    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
+    # kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
     # edges = cv2.dilate(edges,kernel)
     # kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
     # edges = cv2.erode(edges,kernel)
     # edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel,iterations=1)
 
     # 上下各扩一像素
-    edges = dilate(edges)
+    # edges = dilate(edges)
     # 去除图像边缘线条
     edges = remove_edge_line(edges)
 
     t4 = time.time()
     contours,hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     t5 = time.time()
-    # draw_img2 = img.copy()
+    draw_img2 = img.copy()
     boxes = []
     for contour in contours:
         (x, y, bb_w, bb_h) = cv2.boundingRect(contour)
-        whr_th = 2
+        hwr_th = 2
+        whr_th = 10
         area_th = 5*5
-        if bb_h > 80 or bb_h < 3 or bb_w < 2 or bb_h/bb_w > whr_th or bb_w * bb_h < area_th :
+        if bb_h > 80 or bb_h < 3 or bb_w < 2 or bb_h/bb_w > hwr_th or bb_w * bb_h < area_th or bb_h < 5 and bb_w / bb_h > whr_th:
             continue
         box = (x, y, bb_w, bb_h)
         boxes.append(box)
-        # cv2.drawContours(draw_img,[contour],-1,(0,255,0),2)
-        # cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
+        # cv2.drawContours(draw_img2,[contour],-1,(0,255,0),2)
+        cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
     print("get rect cost: ",time.time() - t1)
     # cv2.imshow("result",draw_img2)
     # cv2.waitKey(0)
@@ -224,6 +257,7 @@ def get_item_boxs(img):
 
 if __name__ == "__main__":
     
+    data_home = "F:/Datasets/securety/页面识别/chrome"
     data_home = "F:/Datasets/securety/页面识别/jindie/image1"
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
     
@@ -265,7 +299,9 @@ if __name__ == "__main__":
             else:
                 icos.append(result)
                 cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),1)
-        cv2.imshow("result",draw_img2)
-        cv2.waitKey(0)
-        # cv2.imwrite(f"result/{item}",draw_img2)
         print("total cost: ",time.time()-t1)
+        # cv2.namedWindow('result',0)
+        # cv2.imshow("result",draw_img2)
+        # cv2.waitKey(0)
+        cv2.imwrite(f"result2/{item}",draw_img2)
+        

@@ -9,7 +9,6 @@ from .keys import alphabetChinese as alphabet
 import onnxruntime as rt
 # from util import strLabelConverter, resizeNormalize
 from .util import strLabelConverter, resizeNormalize
-
 converter = strLabelConverter(''.join(alphabet))
 
 def softmax(x):
@@ -120,7 +119,6 @@ class PPrecHandle:
 
 class CRNNHandle:
     def __init__(self, model_path):
-
         self.sess = rt.InferenceSession(model_path)
 
     def predict_rbg(self, im):
