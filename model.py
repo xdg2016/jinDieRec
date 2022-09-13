@@ -11,6 +11,25 @@ import copy
 from utils import get_rotate_crop_image, sorted_boxes
 import time
 import traceback
+import threading
+
+class MyThread(threading.Thread):
+    def __init__(self, func, *args):	# 根据自身需求，将需要传出返回值的方法(func)和参数(args)传入,然后进行初始化
+        # super(MyThread, self).__init__()    # 对父类属性初始化
+        threading.Thread.__init__(self)	#  这样写也可以，目的就是为了初始化父类属性
+        self.func = func
+        self.args = args
+        
+    # 重写run方法进行操作运算
+    def run(self):
+        self.result = self.func(*self.args)		# 将参数(args)传入方法(func)中进行运算，并得到最终结果(result)
+        
+    # 构造get_result方法传出返回值
+    def get_result(self):
+        try:
+            return self.result	# 将结果return
+        except Exception:
+            return None
 
 class  OcrHandle(object):
     def __init__(self,model_path,target_h = 32,batch_num = 8):
@@ -54,15 +73,24 @@ class  OcrHandle(object):
         '''
         return npbox[0][0],npbox[0][1],npbox[3][0],npbox[3][1]
 
+    def predict(self,im,box):
+        x,y,bb_w,bb_h = box 
+        box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
+        # 裁剪
+        partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
+        partImg = self.preprocess(partImg_array.astype(np.float32))
+        try:
+            result = self.crnn_handle.predict_rbg(partImg)  ##识别的文本
+        except Exception as e:
+            print(traceback.format_exc())
+        simPred,prob = result[0]
+        return self.npbox2box(box),simPred,prob
 
     def crnnRecWithBox(self,im,boxes_list):
         """
         crnn模型，ocr识别
-        @@model,
-        @@converter,
-        @@im:Array
-        @@text_recs:text box
-        @@ifIm:是否输出box对应的img
+        @@im            原始图像
+        @@boxes_list    检测出的文本或图标框
 
         """
         results = []
@@ -75,20 +103,29 @@ class  OcrHandle(object):
 
         count = 1
         if self.batch_num == 1:
-            for box in boxes_list:
-                tmp_box = copy.deepcopy(box)
-                x,y,bb_w,bb_h = box 
-                box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
-                # 裁剪
-                partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
-                partImg = self.preprocess(partImg_array.astype(np.float32))
-                try:
-                    simPred,prob = self.crnn_handle.predict_rbg(partImg)  ##识别的文本
-                except Exception as e:
-                    print(traceback.format_exc())
-                    continue
-                results.append([self.npbox2box(box),simPred,prob])
-                count += 1
+            # for box in boxes_list:
+            #     x,y,bb_w,bb_h = box 
+            #     box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
+            #     # 裁剪
+            #     partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
+            #     partImg = self.preprocess(partImg_array.astype(np.float32))
+            #     try:
+            #         result = self.crnn_handle.predict_rbg(partImg)  ##识别的文本
+            #     except Exception as e:
+            #         print(traceback.format_exc())
+            #         continue
+            #     simPred,prob = result[0]
+            #     results.append([self.npbox2box(box),simPred,prob])
+            #     count += 1
+            
+            # # # 多线程
+            threads = [ MyThread(self.predict, im,box) for box in boxes_list]
+            # 此处并不会执行线程，而是将任务分发到每个线程，同步线程。等同步完成后再开始执行start方法
+            [thread.start() for thread in threads]
+            # join()方法等待线程完成
+            [thread.join() for thread in threads]
+            # 将结果汇总
+            results= [thread.get_result() for thread in threads]
         else:
             # # 批量测试
             width_list = []
@@ -96,7 +133,6 @@ class  OcrHandle(object):
             box_lists =[]
             img_num = 0
             for box in boxes_list:
-                tmp_box = copy.deepcopy(box)
                 x,y,bb_w,bb_h = box 
                 # box外扩
                 # delta = 1
@@ -107,7 +143,7 @@ class  OcrHandle(object):
                 box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
                 partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
                 # partImg_array = self.cutbox(partImg_array)
-                cv2.imwrite(f"tmp/{img_num}.png",partImg_array)
+                # cv2.imwrite(f"tmp/{img_num}.png",partImg_array)
                 img_num += 1
                 h,w ,c = partImg_array.shape
                 if h < 1 or h/w > 2 :

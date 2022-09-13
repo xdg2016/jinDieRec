@@ -1,3 +1,4 @@
+import math
 import os
 import time
 import cv2
@@ -22,6 +23,9 @@ def sobel(img,thresh = 10):
         thresh：    二值化阈值
     '''
     # 因为是从右到左做减法，因此有可能得到负值，如果输出为uint8类型，则会只保留灰度差为正的那部分，所以就只有右边缘会保留下来
+    # grad_X = cv2.Scharr(img, cv2.CV_16S, 1, 0)  # 计算 x 轴方向
+    # grad_Y = cv2.Scharr(img, cv2.CV_16S, 0, 1)  # 计算 y 轴方向
+    
     grad_X = cv2.Sobel(img,cv2.CV_64F,1,0,ksize=3) # cv2.CV_64F
     grad_Y = cv2.Sobel(img,cv2.CV_64F,0,1,ksize=3)
 
@@ -199,6 +203,15 @@ def remove_connectRegion(mask_):
     
     return mask_
    
+def line_trans_img(img):
+    if len(img.shape) == 3:
+        img = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY) 
+    out = 2*img
+    #像素截断；；； 
+    out[out>255] = 255 
+    out = np.around(out)
+    return out
+
 
 def get_item_boxs(img,close = False):
     '''
@@ -207,20 +220,21 @@ def get_item_boxs(img,close = False):
     '''
     draw_img2 = img.copy()
     t1 = time.time()
+    # 灰度化
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
- 
+    h,w = gray.shape
+    # 锐化(会放大噪点)
+    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], np.float32) 
+    dst = cv2.filter2D(gray, -1, kernel=kernel)
+    # 边缘检测
     edges = sobel(gray,10)
-
-    h,w = edges.shape
-
-    # 连通域检测和去除
-    edges = remove_connectRegion(edges)
 
     t2 = time.time()
     print("sobel cost: ",t2-t1)
-    # for i in range(2):
-    #     # edges = remove_line(edges)
-    #     edges = remove_line2(img,edges)
+
+    # 连通域检测和去除
+    # edges = remove_line(edges)
+    edges = remove_connectRegion(edges)
     t3 = time.time()
     print("remove line cost: ",t3-t2)
     
@@ -230,7 +244,7 @@ def get_item_boxs(img,close = False):
     # kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
     # edges = cv2.erode(edges,kernel)
     if close:
-        edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel,iterations=1)
+        edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel)
 
     # 去除图像边缘线条
     edges = remove_edge_line(edges)
@@ -279,14 +293,15 @@ def pageItemsRec(img):
 
 if __name__ == "__main__":
     
-    data_home = "F:/Datasets/securety/页面识别/chrome"
-    # data_home = "F:/Datasets/securety/页面识别/jindie/image2"
+    # data_home = "F:/Datasets/securety/页面识别/chrome"
+    data_home = "F:/Datasets/securety/页面识别/jindie/image2"
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
     
     # 初始化OCR模型
     # ocr_handle = model.OcrHandle("models/pprec.onnx",48,32)
-    ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,16)
+    ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,1)
     
+    times = []
     for item in imgs:
         print("#"*200)
         print(item)
@@ -296,6 +311,7 @@ if __name__ == "__main__":
         r = 1
         if r != 1:
             img = cv2.resize(img,(int(ori_w*r),int(ori_h*r)),cv2.INTER_LANCZOS4)
+
         t1 = time.time() 
         draw_img2 = img.copy()
         icos = []
@@ -305,7 +321,10 @@ if __name__ == "__main__":
 
         # 页面元素检测（文本+图标）
         results = pageItemsRec(img)
-        
+        trec = time.time()
+        print("total cost: ",trec-t1)
+        times.append(trec -t1)
+
         # 区分文字和图标
         for result in results:
             box,text,prob = result
@@ -321,5 +340,9 @@ if __name__ == "__main__":
         cv2.imshow("result",draw_img2)
         cv2.waitKey(0)
         # cv2.imwrite(f"result2/{item}",draw_img2)
-        cv2.imwrite(f"result_chrome/{item}",draw_img2)
+        # cv2.imwrite(f"result_chrome/{item}",draw_img2)
         
+    
+    for t in times:
+        print(t)
+    print("平均耗时：",np.mean(times))
