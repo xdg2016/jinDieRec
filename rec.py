@@ -5,6 +5,8 @@ import numpy as np
 # from infer import infer
 from PIL import Image
 import model
+from skimage import morphology
+
 '''
 金蝶财务软件文字和图标识别
 实现思路：
@@ -20,12 +22,6 @@ def sobel(img,thresh = 10):
         thresh：    二值化阈值
     '''
     # 因为是从右到左做减法，因此有可能得到负值，如果输出为uint8类型，则会只保留灰度差为正的那部分，所以就只有右边缘会保留下来
-    # grad_X = cv2.Scharr(img,cv2.CV_64F,1,0)
-    # grad_Y = cv2.Scharr(img,cv2.CV_64F,0,1)
-
-    # grad_X = cv2.Sobel(img,-1,1,0,ksize=3) # cv2.CV_64F
-    # grad_Y = cv2.Sobel(img,-1,0,1,ksize=3)
-
     grad_X = cv2.Sobel(img,cv2.CV_64F,1,0,ksize=3) # cv2.CV_64F
     grad_Y = cv2.Sobel(img,cv2.CV_64F,0,1,ksize=3)
 
@@ -35,6 +31,9 @@ def sobel(img,thresh = 10):
     # #求梯度图像
     grad = cv2.addWeighted(grad_X,0.5,grad_Y,0.5,0)
     edges = cv2.threshold(grad,thresh,255,cv2.THRESH_BINARY)[1]/255
+
+    # edges = cv2.Canny(img,10,200)
+
     return edges.astype(np.uint8)
 
 def remove_single_line(mask,line_idx,direction = 0,len_th = 50):
@@ -195,20 +194,23 @@ def remove_connectRegion(mask_):
         area =  label_width*label_height
         area_r = label_mask.sum() / area
         if  (area_r < area_rth or area_r ==1) and (area > 50*50 or label_height > h/2 or label_width > w/2 ):
+            # 空心情况下
             mask_[labels==i] = 0            # 将该轮廓置零
     
     return mask_
    
 
-def get_item_boxs(img):
+def get_item_boxs(img,close = False):
     '''
     获取元素框，包括文字和图标
+    close:  是否进行闭运算 
     '''
     draw_img2 = img.copy()
     t1 = time.time()
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
  
     edges = sobel(gray,10)
+
     h,w = edges.shape
 
     # 连通域检测和去除
@@ -223,14 +225,13 @@ def get_item_boxs(img):
     print("remove line cost: ",t3-t2)
     
     # 闭运算
-    # kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
+    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
     # edges = cv2.dilate(edges,kernel)
     # kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
     # edges = cv2.erode(edges,kernel)
-    # edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel,iterations=1)
+    if close:
+        edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel,iterations=1)
 
-    # 上下各扩一像素
-    # edges = dilate(edges)
     # 去除图像边缘线条
     edges = remove_edge_line(edges)
 
@@ -250,15 +251,36 @@ def get_item_boxs(img):
         boxes.append(box)
         # cv2.drawContours(draw_img2,[contour],-1,(0,255,0),2)
         cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
+
     print("get rect cost: ",time.time() - t1)
     # cv2.imshow("result",draw_img2)
     # cv2.waitKey(0)
     return boxes
 
+def pageItemsRec(img):
+    '''
+    页面元素识别
+    输入：
+        待识别页面图像
+    返回：
+        识别结果：box,text,prob
+    '''
+    # 获取所有的元素位置（文本+图标）
+    boxes = get_item_boxs(img,close = True)
+    results = []
+    t2 = time.time()
+    # 调用OCR识别
+    results = ocr_handle.crnnRecWithBox(np.array(img),boxes)
+    print("OCR cost: ",time.time()-t2)
+
+    return results
+
+
+
 if __name__ == "__main__":
     
     data_home = "F:/Datasets/securety/页面识别/chrome"
-    data_home = "F:/Datasets/securety/页面识别/jindie/image1"
+    # data_home = "F:/Datasets/securety/页面识别/jindie/image2"
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
     
     # 初始化OCR模型
@@ -275,22 +297,16 @@ if __name__ == "__main__":
         if r != 1:
             img = cv2.resize(img,(int(ori_w*r),int(ori_h*r)),cv2.INTER_LANCZOS4)
         t1 = time.time() 
-        
-        # 获取所有的元素位置（文本+图标）
-        boxes = get_item_boxs(img)
         draw_img2 = img.copy()
-        results = []
         icos = []
         texts = []
         # 置信度阈值
         score_th = 0.8
-        t2 = time.time()
 
-        # 调用OCR识别
-        # results = ocr_handle.PPRecWithBox(np.array(img),boxes)
-        results = ocr_handle.crnnRecWithBox(np.array(img),boxes)
-        print("OCR cost: ",time.time()-t2)
-
+        # 页面元素检测（文本+图标）
+        results = pageItemsRec(img)
+        
+        # 区分文字和图标
         for result in results:
             box,text,prob = result
             if prob > score_th:
@@ -299,9 +315,11 @@ if __name__ == "__main__":
             else:
                 icos.append(result)
                 cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),1)
+
         print("total cost: ",time.time()-t1)
-        # cv2.namedWindow('result',0)
-        # cv2.imshow("result",draw_img2)
-        # cv2.waitKey(0)
-        cv2.imwrite(f"result2/{item}",draw_img2)
+        cv2.namedWindow('result',0)
+        cv2.imshow("result",draw_img2)
+        cv2.waitKey(0)
+        # cv2.imwrite(f"result2/{item}",draw_img2)
+        cv2.imwrite(f"result_chrome/{item}",draw_img2)
         

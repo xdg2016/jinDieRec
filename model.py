@@ -107,7 +107,7 @@ class  OcrHandle(object):
                 box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
                 partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
                 # partImg_array = self.cutbox(partImg_array)
-                # cv2.imwrite(f"tmp/{img_num}.png",partImg_array)
+                cv2.imwrite(f"tmp/{img_num}.png",partImg_array)
                 img_num += 1
                 h,w ,c = partImg_array.shape
                 if h < 1 or h/w > 2 :
