@@ -26,8 +26,19 @@ def sobel(img,thresh = 10):
     # grad_X = cv2.Scharr(img, cv2.CV_16S, 1, 0)  # 计算 x 轴方向
     # grad_Y = cv2.Scharr(img, cv2.CV_16S, 0, 1)  # 计算 y 轴方向
     
-    grad_X = cv2.Sobel(img,cv2.CV_64F,1,0,ksize=3) # cv2.CV_64F
-    grad_Y = cv2.Sobel(img,cv2.CV_64F,0,1,ksize=3)
+    # grad_X = cv2.Sobel(img,cv2.CV_64F,1,0,3) # cv2.CV_64F
+    # grad_Y = cv2.Sobel(img,cv2.CV_64F,0,1,3)
+
+    # Robert算子边缘检测
+    kernelx = np.array([[-1,0],[0,1]], dtype=int)
+    kernely = np.array([[0,-1],[1,0]], dtype=int)
+    grad_X = cv2.filter2D(img, cv2.CV_16S, kernelx)
+    grad_Y = cv2.filter2D(img, cv2.CV_16S, kernely)
+
+    # # 拉普拉斯算子
+    # gray_lap=cv2.Laplacian(img,cv2.CV_16S,ksize=5)
+    # gauss_img=cv2.convertScaleAbs(gray_lap)
+    # dst3=cv2.bitwise_not(gauss_img)
 
     grad_X = cv2.convertScaleAbs(grad_X)      
     grad_Y = cv2.convertScaleAbs(grad_Y)
@@ -184,20 +195,28 @@ def remove_connectRegion(mask_):
     '''
     删除连通域
     '''
+    t1 = time.time()
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_, connectivity=4)
     h,w = mask_.shape
-    print()
+    print(time.time()-t1)
+    num = 0
     for i in range(1,num_labels):
         label_width = stats[i][2]
         label_height = stats[i][3]
+        wh_r = label_width/label_height
+        area =  label_width*label_height
+        cond1 = area > 50*50 or label_height > h/2 or label_width > w/2 or label_height <=3 and label_width >= 10 or label_width <=3 and label_height >=10
+        if not cond1:
+            continue
+        num += 1
         label_x = stats[i][0]
         label_y = stats[i][1]
-        label = labels[label_y:label_y + label_height, label_x:label_x + label_width]  # 获取label外接矩形
-        label_mask = (label == i).astype(np.uint8)
+        label_mask = (labels[label_y:label_y + label_height, label_x:label_x + label_width]  == i).astype(np.uint8)
         area_rth = 0.3
-        area =  label_width*label_height
         area_r = label_mask.sum() / area
-        if  (area_r < area_rth or area_r ==1) and (area > 50*50 or label_height > h/2 or label_width > w/2 ):
+        if  (area_r < area_rth or area_r > 0.9 or \
+            ((label_height <=5 or label_width <=5) and (area_r < 0.6 or wh_r > 50))) and \
+            cond1:
             # 空心情况下
             mask_[labels==i] = 0            # 将该轮廓置零
     
@@ -231,7 +250,7 @@ def get_item_boxs(img,close = False):
 
     t2 = time.time()
     print("sobel cost: ",t2-t1)
-
+   
     # 连通域检测和去除
     # edges = remove_line(edges)
     edges = remove_connectRegion(edges)
@@ -244,6 +263,7 @@ def get_item_boxs(img,close = False):
     # kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
     # edges = cv2.erode(edges,kernel)
     if close:
+        # edges = cv2.dilate(edges,kernel)
         edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel)
 
     # 去除图像边缘线条
@@ -264,7 +284,7 @@ def get_item_boxs(img,close = False):
         box = (x, y, bb_w, bb_h)
         boxes.append(box)
         # cv2.drawContours(draw_img2,[contour],-1,(0,255,0),2)
-        cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
+        # cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
 
     print("get rect cost: ",time.time() - t1)
     # cv2.imshow("result",draw_img2)
@@ -335,7 +355,6 @@ if __name__ == "__main__":
                 icos.append(result)
                 cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),1)
 
-        print("total cost: ",time.time()-t1)
         cv2.namedWindow('result',0)
         cv2.imshow("result",draw_img2)
         cv2.waitKey(0)
