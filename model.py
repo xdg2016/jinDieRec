@@ -146,7 +146,7 @@ class  OcrHandle(object):
                 # cv2.imwrite(f"tmp/{img_num}.png",partImg_array)
                 img_num += 1
                 h,w ,c = partImg_array.shape
-                if h < 1 or h/w > 2 :
+                if h < 1 or h/w > 2 or h > 20 :
                     continue 
                 box_lists.append(box)
                 width_list.append(w / h)
