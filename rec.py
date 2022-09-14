@@ -19,12 +19,12 @@ def sobel(img,thresh = 10):
     '''
     边缘检测
     输入：
-        img：       灰度图像
-        thresh：    二值化阈值
+        img:        灰度图像
+        thresh:     二值化阈值
+    返回:
+        edges:      二值化后的边缘图
     '''
     # 因为是从右到左做减法，因此有可能得到负值，如果输出为uint8类型，则会只保留灰度差为正的那部分，所以就只有右边缘会保留下来
-    # grad_X = cv2.Scharr(img, cv2.CV_16S, 1, 0)  # 计算 x 轴方向
-    # grad_Y = cv2.Scharr(img, cv2.CV_16S, 0, 1)  # 计算 y 轴方向
     
     # grad_X = cv2.Sobel(img,cv2.CV_64F,1,0,3) # cv2.CV_64F
     # grad_Y = cv2.Sobel(img,cv2.CV_64F,0,1,3)
@@ -34,11 +34,6 @@ def sobel(img,thresh = 10):
     kernely = np.array([[0,-1],[1,0]], dtype=int)
     grad_X = cv2.filter2D(img, cv2.CV_16S, kernelx)
     grad_Y = cv2.filter2D(img, cv2.CV_16S, kernely)
-
-    # # 拉普拉斯算子
-    # gray_lap=cv2.Laplacian(img,cv2.CV_16S,ksize=5)
-    # gauss_img=cv2.convertScaleAbs(gray_lap)
-    # dst3=cv2.bitwise_not(gauss_img)
 
     grad_X = cv2.convertScaleAbs(grad_X)      
     grad_Y = cv2.convertScaleAbs(grad_Y)
@@ -191,9 +186,22 @@ def remove_edge_line(mask,ed=5):
     mask[:,w-ed:] = 0
     return mask
 
+def remove_connect_line(mask):
+    h,w = mask.shape
+    mask_ = mask.copy()
+    r = 6
+    for h_ in range(h):
+        cond1 = h_ > 0 and h_ < h-1 
+        if mask_[h_,:].sum() > w - r:
+            mask[h_,:] = 0
+    for w_ in range(w):
+        if mask_[:,w_].sum() > h - r:
+            mask[:,w_] = 0
+    return mask
+
 def remove_connectRegion(mask_):
     '''
-    删除连通域
+    删除不符合条件的连通域
     '''
     t1 = time.time()
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_, connectivity=4)
@@ -205,7 +213,7 @@ def remove_connectRegion(mask_):
         label_height = stats[i][3]
         wh_r = label_width/label_height
         area =  label_width*label_height
-        cond1 = area > 50*50 or label_height > h/2 or label_width > w/2 or label_height <=3 and label_width >= 10 or label_width <=3 and label_height >=10
+        cond1 = area > 30*30 or label_height > h/2 or label_width > w/2 or label_height <=3 and label_width >= 10 or label_width <=3 and label_height >=10
         if not cond1:
             continue
         num += 1
@@ -214,74 +222,63 @@ def remove_connectRegion(mask_):
         label_mask = (labels[label_y:label_y + label_height, label_x:label_x + label_width]  == i).astype(np.uint8)
         area_rth = 0.3
         area_r = label_mask.sum() / area
+        # 删除框线
+        if area_r < area_rth and wh_r > 1.5:
+            label_mask = remove_connect_line(label_mask)
         if  (area_r < area_rth or area_r > 0.9 or \
-            ((label_height <=5 or label_width <=5) and (area_r < 0.6 or wh_r > 50))) and \
+            ((label_height <=5 or label_width <=5) and (area_r < 0.7 or wh_r > 50))) and \
             cond1:
             # 空心情况下
             mask_[labels==i] = 0            # 将该轮廓置零
     
     return mask_
-   
-def line_trans_img(img):
-    if len(img.shape) == 3:
-        img = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY) 
-    out = 2*img
-    #像素截断；；； 
-    out[out>255] = 255 
-    out = np.around(out)
-    return out
 
-
-def get_item_boxs(img,close = False):
+def get_item_boxs(img,r=1,ksize = 3,close = True):
     '''
     获取元素框，包括文字和图标
-    close:  是否进行闭运算 
+    输入：
+        img:    输入图像
+        r:      图像缩放比例
+        ksize:  闭运算核大小
+        close:  是否进行闭运算
+    输出:
+        boxes:  检测出的所有box
+
     '''
-    draw_img2 = img.copy()
     t1 = time.time()
     # 灰度化
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
     h,w = gray.shape
-    # 锐化(会放大噪点)
-    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], np.float32) 
-    dst = cv2.filter2D(gray, -1, kernel=kernel)
+
     # 边缘检测
     edges = sobel(gray,10)
-
     t2 = time.time()
     print("sobel cost: ",t2-t1)
    
     # 连通域检测和去除
-    # edges = remove_line(edges)
     edges = remove_connectRegion(edges)
     t3 = time.time()
     print("remove line cost: ",t3-t2)
     
     # 闭运算
-    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
-    # edges = cv2.dilate(edges,kernel)
-    # kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
-    # edges = cv2.erode(edges,kernel)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(ksize,ksize))
     if close:
-        # edges = cv2.dilate(edges,kernel)
         edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel)
-
-    # 去除图像边缘线条
-    edges = remove_edge_line(edges)
 
     t4 = time.time()
     contours,hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     t5 = time.time()
-    draw_img2 = img.copy()
+    # draw_img2 = img.copy()
     boxes = []
+    # 过滤box
     for contour in contours:
         (x, y, bb_w, bb_h) = cv2.boundingRect(contour)
         hwr_th = 2
         whr_th = 10
         area_th = 5*5
-        if bb_h > 80 or bb_h < 3 or bb_w < 2 or bb_h/bb_w > hwr_th or bb_w * bb_h < area_th or bb_h < 5 and bb_w / bb_h > whr_th:
+        if bb_h > 50 or bb_h < 3 or bb_w < 2 or bb_h/bb_w > hwr_th or bb_w * bb_h < area_th or bb_h < 5 and bb_w / bb_h > whr_th:
             continue
-        box = (x, y, bb_w, bb_h)
+        box = (int(x/r), int(y/r), int(bb_w/r), int(bb_h/r))
         boxes.append(box)
         # cv2.drawContours(draw_img2,[contour],-1,(0,255,0),2)
         # cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
@@ -291,20 +288,28 @@ def get_item_boxs(img,close = False):
     # cv2.waitKey(0)
     return boxes
 
-def pageItemsRec(img):
+def page_items_rec(img,r=1,ksize = 3):
     '''
     页面元素识别
     输入：
-        待识别页面图像
+        img:    待识别页面图像
+        r:      图形缩放比例
+        k_size: 闭运算的核大小
     返回：
-        识别结果：box,text,prob
+        识别结果: box,text,prob
     '''
     # 获取所有的元素位置（文本+图标）
-    boxes = get_item_boxs(img,close = True)
+    ori_h,ori_w = img.shape[:2]
+    if r != 1:
+        img_resized = cv2.resize(img,(int(ori_w*r),int(ori_h*r)),cv2.INTER_LANCZOS4)
+        boxes = get_item_boxs(img_resized,r,ksize = ksize)
+    else:
+        boxes = get_item_boxs(img,r,ksize = ksize)
     results = []
     t2 = time.time()
     # 调用OCR识别
-    results = ocr_handle.crnnRecWithBox(np.array(img),boxes)
+    # results = ocr_handle.crnnRecWithBox(np.array(img),boxes)
+    results = ocr_handle.PPRecWithBox(np.array(img),boxes)
     print("OCR cost: ",time.time()-t2)
 
     return results
@@ -314,33 +319,30 @@ def pageItemsRec(img):
 if __name__ == "__main__":
     
     # data_home = "F:/Datasets/securety/页面识别/chrome"
-    data_home = "F:/Datasets/securety/页面识别/jindie/image2"
+    data_home = "F:/Datasets/securety/页面识别/jindie/image1"
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
     
     # 初始化OCR模型
-    # ocr_handle = model.OcrHandle("models/pprec.onnx",48,32)
-    ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,1)
+    ocr_handle = model.OcrHandle("models/pprec_v2.onnx",32,1)
+    # ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,1)
     
     times = []
     for item in imgs:
         print("#"*200)
         print(item)
         image_path = os.path.join(data_home,item)
-        img = np.array(Image.open(image_path).convert("RGB"))[:,:,::-1]    # 直接转RGB
+        img = np.array(Image.open(image_path).convert("RGB"))    # 直接转RGB
         ori_h,ori_w = img.shape[:2]
         r = 1
-        if r != 1:
-            img = cv2.resize(img,(int(ori_w*r),int(ori_h*r)),cv2.INTER_LANCZOS4)
-
         t1 = time.time() 
-        draw_img2 = img.copy()
+        draw_img2 = img[:,:,::-1].copy()
         icos = []
         texts = []
         # 置信度阈值
         score_th = 0.8
 
         # 页面元素检测（文本+图标）
-        results = pageItemsRec(img)
+        results = page_items_rec(img,r,ksize = 3)
         trec = time.time()
         print("total cost: ",trec-t1)
         times.append(trec -t1)
@@ -348,12 +350,13 @@ if __name__ == "__main__":
         # 区分文字和图标
         for result in results:
             box,text,prob = result
+            # print(result)
             if prob > score_th:
                 texts.append(result)
-                cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(0,0,255),1)
+                cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(0,0,255),2)
             else:
                 icos.append(result)
-                cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),1)
+                cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),2)
 
         cv2.namedWindow('result',0)
         cv2.imshow("result",draw_img2)

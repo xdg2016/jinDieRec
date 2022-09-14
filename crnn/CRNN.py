@@ -99,16 +99,11 @@ class PPrecHandle:
         预测
         """
         t1 = time.time()
-        preds = self.sess.run(["softmax_5.tmp_0"], {"x": im.astype(np.float32)}) # 12ms
+        # pprec v2
+        preds = self.sess.run(["save_infer_model/scale_0.tmp_1"], {"x": im.astype(np.float32)}) # 12ms
+        # pprec v3
+        # preds = self.sess.run(["softmax_5.tmp_0"], {"x": im.astype(np.float32)})    
         preds = preds[0]
-
-        #pprec 
-        # preds_idx = preds.argmax(axis=2)
-        # preds_prob = preds.max(axis=2)
-        # text = self.decode(preds_idx, preds_prob, is_remove_duplicate=True)[0]
-
-        length  = preds.shape[0]
-        batch = preds.shape[1]
 
         preds_idx = preds.argmax(axis=2)
         preds_prob = preds.max(axis=2)

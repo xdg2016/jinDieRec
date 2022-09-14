@@ -73,8 +73,31 @@ class  OcrHandle(object):
         '''
         return npbox[0][0],npbox[0][1],npbox[3][0],npbox[3][1]
 
-    def predict(self,im,box):
+    def check_edge(self,x,y,bb_w,bb_h,h,w):
+        '''
+        边界检查
+        '''
+        x = max(0,x)
+        y = max(0,y)
+        bb_w = w-bb_w-x if x + bb_w > w else bb_w
+        bb_h = h-bb_h-y if y + bb_h > h else bb_h
+        return x,y,bb_w,bb_h
+
+    def expand(self,x,y,bb_w,bb_h,h,w,delta=1):
+        '''
+        外扩delta个像素
+        '''
+        delta = 1
+        x -= delta
+        y -= delta 
+        bb_w += 2*delta
+        bb_h += 2*delta
+        x,y,bb_w,bb_h = self.check_edge(x,y,bb_w,bb_h,h,w)
+        return x,y,bb_w,bb_h
+
+    def crnn_predict(self,im,box):
         x,y,bb_w,bb_h = box 
+        x,y,bb_w,bb_h = self.expand(x,y,bb_w,bb_h,im.shape[0],im.shape[1],2)
         box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
         # 裁剪
         partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
@@ -83,6 +106,7 @@ class  OcrHandle(object):
             result = self.crnn_handle.predict_rbg(partImg)  ##识别的文本
         except Exception as e:
             print(traceback.format_exc())
+            result = [("",0)]
         simPred,prob = result[0]
         return self.npbox2box(box),simPred,prob
 
@@ -94,13 +118,7 @@ class  OcrHandle(object):
 
         """
         results = []
-        # boxes_list = sorted_boxes(np.array(boxes_list))
-
-        line_imgs = []
-
         partImg = Image.fromarray(im).convert("RGB")
-        line_imgs.append(partImg)
-
         count = 1
         if self.batch_num == 1:
             # for box in boxes_list:
@@ -118,8 +136,8 @@ class  OcrHandle(object):
             #     results.append([self.npbox2box(box),simPred,prob])
             #     count += 1
             
-            # # # 多线程
-            threads = [ MyThread(self.predict, im,box) for box in boxes_list]
+            # 多线程
+            threads = [ MyThread(self.crnn_predict, im,box) for box in boxes_list if box[3] > 5 and box[2] > 5]
             # 此处并不会执行线程，而是将任务分发到每个线程，同步线程。等同步完成后再开始执行start方法
             [thread.start() for thread in threads]
             # join()方法等待线程完成
@@ -182,6 +200,22 @@ class  OcrHandle(object):
         return results
 
 
+    def pp_predict(self,im,box):
+        x,y,bb_w,bb_h = box 
+        # 外扩delta个像素
+        x,y,bb_w,bb_h = self.expand(x,y,bb_w,bb_h,im.shape[0],im.shape[1],2)
+        box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
+        # 裁剪
+        partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
+        partImg = self.preprocess(partImg_array.astype(np.float32))
+        try:
+            result = self.pprec_handle.predict_rbg(partImg)  ##识别的文本
+        except Exception as e:
+            print(traceback.format_exc())
+            result = [("",0)]
+        simPred,prob = result[0]
+        return self.npbox2box(box),simPred,prob
+
     def PPRecWithBox(self,im,boxes_list):
         """
         crnn模型，ocr识别
@@ -197,23 +231,14 @@ class  OcrHandle(object):
         count = 1
         batch_num = self.batch_num
         if batch_num == 1:
-            for box in boxes_list:
-                x,y,bb_w,bb_h = box 
-                box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
-                # tmp_box = copy.deepcopy(box)
-                # 裁剪
-                partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
-                partImg = self.preprocess(partImg_array.astype(np.float32))
-                try:
-                    result = self.pprec_handle.predict_rbg(partImg)
-                except Exception as e:
-                    print(traceback.format_exc())
-                    continue
-                simPred = result[0][0]
-                score = result[0][1]
-                if simPred.strip() != '':
-                    results.append([box,"{}、 ".format(count)+  simPred,score])
-                    count += 1
+            # 多线程
+            threads = [ MyThread(self.pp_predict, im,box) for box in boxes_list if box[3] > 5 and box[2] > 5]
+            # 此处并不会执行线程，而是将任务分发到每个线程，同步线程。等同步完成后再开始执行start方法
+            [thread.start() for thread in threads]
+            # join()方法等待线程完成
+            [thread.join() for thread in threads]
+            # 将结果汇总
+            results= [thread.get_result() for thread in threads]
         else:
             # # 批量测试
             width_list = []
