@@ -12,6 +12,8 @@ from utils import get_rotate_crop_image, sorted_boxes
 import time
 import traceback
 import threading
+import tqdm_pathos
+from multiprocessing.dummy import Pool as ThreadPool
 
 class MyThread(threading.Thread):
     def __init__(self, func, *args):	# 根据自身需求，将需要传出返回值的方法(func)和参数(args)传入,然后进行初始化
@@ -137,7 +139,7 @@ class  OcrHandle(object):
             #     count += 1
             
             # 多线程
-            threads = [ MyThread(self.crnn_predict, im,box) for box in boxes_list if box[3] > 5 and box[2] > 5]
+            threads = [ MyThread(self.crnn_predict, im,box) for box in boxes_list if box[3] > 3 and box[2] > 3]
             # 此处并不会执行线程，而是将任务分发到每个线程，同步线程。等同步完成后再开始执行start方法
             [thread.start() for thread in threads]
             # join()方法等待线程完成
@@ -200,7 +202,8 @@ class  OcrHandle(object):
         return results
 
 
-    def pp_predict(self,im,box):
+    def pp_predict(self,data):
+        im,box = data
         x,y,bb_w,bb_h = box 
         # 外扩delta个像素
         x,y,bb_w,bb_h = self.expand(x,y,bb_w,bb_h,im.shape[0],im.shape[1],2)
@@ -227,18 +230,24 @@ class  OcrHandle(object):
 
         """
         results = []
-
-        count = 1
         batch_num = self.batch_num
         if batch_num == 1:
-            # 多线程
-            threads = [ MyThread(self.pp_predict, im,box) for box in boxes_list if box[3] > 5 and box[2] > 5]
-            # 此处并不会执行线程，而是将任务分发到每个线程，同步线程。等同步完成后再开始执行start方法
-            [thread.start() for thread in threads]
-            # join()方法等待线程完成
-            [thread.join() for thread in threads]
-            # 将结果汇总
-            results= [thread.get_result() for thread in threads]
+            # 多线程方法一
+            # threads = [ MyThread(self.pp_predict, (im,box)) for box in boxes_list if box[3] > 3 and box[2] > 3]
+            # # 此处并不会执行线程，而是将任务分发到每个线程，同步线程。等同步完成后再开始执行start方法
+            # [thread.start() for thread in threads]
+            # # join()方法等待线程完成
+            # [thread.join() for thread in threads]
+            # # 将结果汇总
+            # results= [thread.get_result() for thread in threads]
+            
+            # 多线程方法二（更快）
+            datas = [(im,box) for box in boxes_list if box[2] > 3 and box[3] >3]
+            pool = ThreadPool(processes=10)
+            results = pool.map(self.pp_predict, datas)
+            pool.close()
+            pool.join()
+
         else:
             # # 批量测试
             width_list = []
@@ -257,14 +266,14 @@ class  OcrHandle(object):
                 width_list.append(w / h)    # 宽高比
                 boxImgs_list.append(partImg_array)
             t2 = time.time()
-            print("cost1: ",t2-t1)  # 约9ms
+            # print("cost1: ",t2-t1)  # 约9ms
             # 重新排序
             # Sorting can speed up the recognition process
             indices = np.argsort(np.array(width_list))
             boxes_list = np.array(box_lists)[indices]
-            boxImgs_list = np.array(boxImgs_list)[indices]
+            boxImgs_list = np.array(boxImgs_list,dtype=object)[indices]
             t3 = time.time()
-            print("cost2: ",t3-t2)
+            # print("cost2: ",t3-t2)
             # 遍历
             box_num = len(boxes_list)
             for beg_img_no in range(0, box_num, batch_num):
@@ -274,10 +283,10 @@ class  OcrHandle(object):
                 t4 = time.time()
                 max_wh_ratio = max([box.shape[1]/box.shape[0] for box in boxImgs_list[beg_img_no:end_img_no]])
                 t5 = time.time()
-                print("求最大宽高比耗时：",t5-t4)
+                # print("求最大宽高比耗时：",t5-t4)
                 norm_img_batch = [self.preprocess(partImg,max_wh_ratio) for partImg in boxImgs_list[beg_img_no:end_img_no]]
                 t6 = time.time()
-                print("预处理耗时: ",t6-t5)
+                # print("预处理耗时: ",t6-t5)
                 partImg = np.concatenate(norm_img_batch)
 
                 try:
@@ -286,17 +295,15 @@ class  OcrHandle(object):
                     print(traceback.format_exc())
                     continue
                 t7 = time.time()
-                print("预测耗时：",t7-t6)
+                # print("预测耗时：",t7-t6)
                 pred_num = batch_num
                 if end_img_no % batch_num > 0:
                     pred_num = end_img_no % batch_num
                 for i in range(pred_num):
                     simPred = result[i][0]
                     score = result[i][1]
-                    if simPred.strip() != '':
-                        results.append([batch_boxes[i],"{}、 ".format(count)+  simPred])
-                        count += 1   
-                print("batch time: " ,time.time()-t4)
+                    results.append([self.npbox2box(batch_boxes[i]),simPred,score])
+                # print("batch time: " ,time.time()-t4)
             print("all cost: ",time.time()-t1)
         return results
 
