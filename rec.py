@@ -7,6 +7,13 @@ import numpy as np
 from PIL import Image
 import model
 from skimage import morphology
+import logging
+
+# logging.basicConfig(level=logging.DEBUG) 
+
+
+log = logging.getLogger()
+log.setLevel("DEBUG")
 
 '''
 金蝶财务软件文字和图标识别
@@ -15,7 +22,7 @@ from skimage import morphology
     根据文字位置mask，对剩余的非文字部分，做sobel,轮廓检测，记录位置
 '''
 
-def sobel(img,thresh = 10):
+def edge_detect(img,thresh = 10):
     '''
     边缘检测
     输入：
@@ -141,7 +148,7 @@ def remove_line2(img,edges):
         y1  = min(h-1, max(0,int(y0  +  L*(a))))
         x2  = min(w-1, max(0,int(x0  -  L*(-b))))
         y2  = min(h-1, max(0,int(y0  -  L*(a))))
-        # print( (x1, y1), (x2, y2))
+        # logging.debug( (x1, y1), (x2, y2))
         cv2.line(draw_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
         if theta == 0: # 竖直
             edges = remove_single_line(edges,x1,0,min_len)
@@ -204,11 +211,12 @@ def remove_connectRegion(mask_):
     删除不符合条件的连通域
     '''
     t1 = time.time()
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_, connectivity=4)
+
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_, connectivity=8)
     h,w = mask_.shape
-    print(time.time()-t1)
     num = 0
     for i in range(1,num_labels):
+        # t_ = time.time()
         label_width = stats[i][2]
         label_height = stats[i][3]
         wh_r = label_width/label_height
@@ -216,24 +224,25 @@ def remove_connectRegion(mask_):
         cond1 = area > 30*30 or label_height > h/2 or label_width > w/2 or label_height <=3 and label_width >= 10 or label_width <=3 and label_height >=10
         if not cond1:
             continue
-        num += 1
+        
         label_x = stats[i][0]
         label_y = stats[i][1]
+        
         label_mask = (labels[label_y:label_y + label_height, label_x:label_x + label_width]  == i).astype(np.uint8)
         area_rth = 0.3
         area_r = label_mask.sum() / area
         # 删除框线
-        if area_r < area_rth and wh_r > 1.5:
-            label_mask = remove_connect_line(label_mask)
         if  (area_r < area_rth or area_r > 0.9 or \
             ((label_height <=5 or label_width <=5) and (area_r < 0.7 or wh_r > 50))) and \
-            cond1:
-            # 空心情况下
-            mask_[labels==i] = 0            # 将该轮廓置零
-    
+            (wh_r > 1.2 or wh_r < 0.2) :
+            # 将该轮廓置零 
+            mask_[label_y:label_y + label_height, label_x:label_x + label_width][labels[label_y:label_y + label_height, label_x:label_x + label_width]==i] = 0    
+            # mask_[labels==i] =0    # 速度太慢    
+            num += 1
+    # print(time.time()-t1)
     return mask_
 
-def get_item_boxs(img,r=1,ksize = 3,close = True):
+def get_item_boxs(img,r = 1,ksize = 3,close = True):
     '''
     获取元素框，包括文字和图标
     输入：
@@ -246,29 +255,30 @@ def get_item_boxs(img,r=1,ksize = 3,close = True):
 
     '''
     t1 = time.time()
+    ori_h,ori_w = img.shape[:2]
+    # draw_img2 = img.copy()
+    if r != 1:
+        img = cv2.resize(img,(int(ori_w*r),int(ori_h*r)),cv2.INTER_LANCZOS4)
     # 灰度化
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
     h,w = gray.shape
 
     # 边缘检测
-    edges = sobel(gray,10)
+    edges = edge_detect(gray,10)
     t2 = time.time()
-    print("sobel cost: ",t2-t1)
+    logging.debug(f"edge_detect cost: {t2-t1}")
    
     # 连通域检测和去除
     edges = remove_connectRegion(edges)
     t3 = time.time()
-    print("remove line cost: ",t3-t2)
+    logging.debug(f"remove_connectRegion cost: {t3-t2}")
     
-    # 闭运算
+    # 闭运算连接文字区域
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(ksize,ksize))
     if close:
         edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel)
-
-    t4 = time.time()
     contours,hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    t5 = time.time()
-    # draw_img2 = img.copy()
+
     boxes = []
     # 过滤box
     for contour in contours:
@@ -278,12 +288,11 @@ def get_item_boxs(img,r=1,ksize = 3,close = True):
         area_th = 5*5
         if bb_h > 50 or bb_h < 3 or bb_w < 2 or bb_h/bb_w > hwr_th or bb_w * bb_h < area_th or bb_h < 5 and bb_w / bb_h > whr_th:
             continue
+        # 映射回原始尺寸
         box = (int(x/r), int(y/r), int(bb_w/r), int(bb_h/r))
         boxes.append(box)
         # cv2.drawContours(draw_img2,[contour],-1,(0,255,0),2)
         # cv2.rectangle(draw_img2,(x,y),(x+bb_w,y+bb_h),(0,0,255),1)
-
-    print("get rect cost: ",time.time() - t1)
     # cv2.imshow("result",draw_img2)
     # cv2.waitKey(0)
     return boxes
@@ -298,19 +307,17 @@ def page_items_rec(img,r=1,ksize = 3):
     返回：
         识别结果: box,text,prob
     '''
+    t1 = time.time()
     # 获取所有的元素位置（文本+图标）
-    ori_h,ori_w = img.shape[:2]
-    if r != 1:
-        img_resized = cv2.resize(img,(int(ori_w*r),int(ori_h*r)),cv2.INTER_LANCZOS4)
-        boxes = get_item_boxs(img_resized,r,ksize = ksize)
-    else:
-        boxes = get_item_boxs(img,r,ksize = ksize)
-    results = []
+    boxes = get_item_boxs(img,r,ksize = ksize)
     t2 = time.time()
+    logging.debug(f"get boxes cost: {t2 - t1}")
+
+    results = []
     # 调用OCR识别
     # results = ocr_handle.crnnRecWithBox(np.array(img),boxes)
     results = ocr_handle.PPRecWithBox(np.array(img),boxes)
-    print("OCR cost: ",time.time()-t2)
+    logging.debug(f"OCR cost: {time.time()-t2}")
 
     return results
 
@@ -318,24 +325,25 @@ def page_items_rec(img,r=1,ksize = 3):
 
 if __name__ == "__main__":
     
-    # data_home = "F:/Datasets/securety/页面识别/chrome"
-    data_home = "F:/Datasets/securety/页面识别/jindie/image1"
+    data_home = "F:/Datasets/securety/页面识别/chrome"
+    # data_home = "F:/Datasets/securety/页面识别/jindie/image8"
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
     
     # 初始化OCR模型
     ocr_handle = model.OcrHandle("models/pprec_v2.onnx",32,1)
+    # ocr_handle = model.OcrHandle("models/pprec.onnx",48,1)
     # ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,1)
     
     times = []
     for item in imgs:
-        print("#"*200)
-        print(item)
+        logging.debug("#"*200)
+        logging.debug(item)
         image_path = os.path.join(data_home,item)
-        img = np.array(Image.open(image_path).convert("RGB"))    # 直接转RGB
+        img = np.array(Image.open(image_path).convert("RGB"))   # 直接转RGB
+        draw_img2 = img[:,:,::-1].copy()                        # 转成BGR为了显示和保存结果
         ori_h,ori_w = img.shape[:2]
-        r = 1
+        r = 3/4
         t1 = time.time() 
-        draw_img2 = img[:,:,::-1].copy()
         icos = []
         texts = []
         # 置信度阈值
@@ -344,13 +352,13 @@ if __name__ == "__main__":
         # 页面元素检测（文本+图标）
         results = page_items_rec(img,r,ksize = 3)
         trec = time.time()
-        print("total cost: ",trec-t1)
+        logging.debug(f"total cost: {trec-t1}")
         times.append(trec -t1)
 
         # 区分文字和图标
         for result in results:
             box,text,prob = result
-            # print(result)
+            # logging.debug(result)
             if prob > score_th:
                 texts.append(result)
                 cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(0,0,255),2)
@@ -365,6 +373,4 @@ if __name__ == "__main__":
         # cv2.imwrite(f"result_chrome/{item}",draw_img2)
         
     
-    for t in times:
-        print(t)
-    print("平均耗时：",np.mean(times))
+    logging.debug(f"平均耗时：{np.mean(times)}")
