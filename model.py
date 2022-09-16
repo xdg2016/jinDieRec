@@ -89,11 +89,10 @@ class  OcrHandle(object):
         '''
         外扩delta个像素
         '''
-        delta = 1
         x -= delta
         y -= delta 
         bb_w += 2*delta
-        bb_h += 2*delta
+        bb_h += 1*delta
         x,y,bb_w,bb_h = self.check_edge(x,y,bb_w,bb_h,h,w)
         return x,y,bb_w,bb_h
 
@@ -242,11 +241,16 @@ class  OcrHandle(object):
             # results= [thread.get_result() for thread in threads]
             
             # 多线程方法二（更快）
-            datas = [(im,box) for box in boxes_list if box[2] > 3 and box[3] >3]
+            datas = [(im,box) for box in boxes_list if box[2] > 3 and box[3] > 3 and box[2] / box[3] < 50]
             pool = ThreadPool(processes=10)
             results = pool.map(self.pp_predict, datas)
             pool.close()
             pool.join()
+            used_boxes = set([box[1] for box in datas])
+            rest_boxes = list(set(boxes_list) - used_boxes)
+            results.extend([(self.npbox2box(np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])),"",0) for x,y,bb_w,bb_h in rest_boxes])
+
+
 
         else:
             # # 批量测试
