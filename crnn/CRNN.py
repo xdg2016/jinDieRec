@@ -151,8 +151,3 @@ class CRNNHandle:
             text, prob = converter.decode(preds_idxs,preds_probs, length, raw=False)
 
             return [(text, prob)] 
-
-if __name__ == "__main__":
-    im = Image.open("471594277244_.pic.jpg")
-    crnn_handle = CRNNHandle(model_path="../models/crnn_lite_lstm_bk.onnx")
-    print(crnn_handle.predict(im))

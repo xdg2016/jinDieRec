@@ -1,9 +1,6 @@
 #!/usr/bin/python
 # encoding: utf-8
 
-
-from cmath import isnan
-import collections
 from PIL import Image
 import numpy as np
 
@@ -87,4 +84,31 @@ class averager(object):
         if self.n_count != 0:
             res = self.sum / float(self.n_count)
         return res
+
+
+def get_rotate_crop_image(img, points):
+    img_height, img_width = img.shape[0:2]
+    left = int(np.min(points[:, 0]))
+    right = int(np.max(points[:, 0]))
+    top = int(np.min(points[:, 1]))
+    bottom = int(np.max(points[:, 1]))
+    img_crop = img[top:bottom, left:right, :].copy()
+    dst_img = img_crop
+    return dst_img
+    points[:, 0] = points[:, 0] - left
+    points[:, 1] = points[:, 1] - top
+    img_crop_width = int(np.linalg.norm(points[0] - points[1]))
+    img_crop_height = int(np.linalg.norm(points[0] - points[3]))
+    pts_std = np.float32([[0, 0], [img_crop_width, 0],\
+        [img_crop_width, img_crop_height], [0, img_crop_height]])
+
+    M = cv2.getPerspectiveTransform(points, pts_std)
+    dst_img = cv2.warpPerspective(
+        img_crop,
+        M, (img_crop_width, img_crop_height),
+        borderMode=cv2.BORDER_REPLICATE)
+    dst_img_height, dst_img_width = dst_img.shape[0:2]
+    if dst_img_height * 1.0 / dst_img_width >= 1.5:
+        dst_img = np.rot90(dst_img)
+    return dst_img
 

@@ -1,17 +1,10 @@
-import enum
-import math
-import os
+from concurrent.futures import process
+
 import time
 import cv2
 import numpy as np
-# from infer import infer
-from PIL import Image
-import model
-from skimage import morphology
 import logging
-
-# logging.basicConfig(level=logging.DEBUG) 
-
+from config import ocr_predict
 
 log = logging.getLogger()
 log.setLevel("DEBUG")
@@ -235,9 +228,6 @@ def remove_connectRegion(mask_):
         # 面积比
         area_r = label_mask.sum() / area
         # 删除框线
-        # if  (area_r < area_rth or area_r > 0.9 or \
-        #     ((label_height <=5 and label_width > 15 or label_width <=5 and label_height > 15) and (area_r < 0.7 or wh_r > 50))) and \
-        #     (wh_r > 1.2 and label_height < 30 and label_width > 15 or wh_r < 0.2 and label_height > 10 or label_height > 50) :
         cond2 = area_r < area_rth and (((wh_r > 1.5 or wh_r < 1/1.5) and label_height > 10) or (label_height > 100 and label_width > 100) )
         cond3 = wh_r > 50 and label_height < 10 or wh_r < 0.2 and label_width < 10
         cond4 = area_r > 0.9 and (wh_r > 10 or wh_r < 0.2)
@@ -248,7 +238,47 @@ def remove_connectRegion(mask_):
     # print(time.time()-t1)
     return mask_
 
-def get_item_boxs(img,r = 1,ksize = 3,close = True):
+
+def merge_boxes(boxes):
+    '''
+    合并检测框
+    '''
+    boxes = np.array(boxes)
+    new_boxes = []
+    delta = 5
+    h_delta = 5
+    wh_r_th = 1.5
+
+    boxes_l = boxes[:,0]
+    boxes_r = boxes[:,0] + boxes[:,2]
+    boxes_t = boxes[:,1]
+    boxes_h = boxes[:,3]
+    boxes_whr = boxes[:,2]/boxes[:,3]
+
+    for i in range(len(boxes)):
+        box = boxes[i]
+        l,r = box[0],box[0]+box[2]
+        
+        idxs_r = set(np.where((boxes_l - r < delta) & (boxes_l > l))[0])                                                        # 右侧相邻框
+        idxs_l = set(np.where((l - boxes_r < delta ) & (boxes_r < r))[0])                                                       # 左侧相邻框
+        idxs_samel = set(np.where((abs(box[1] - boxes_t) < h_delta) & (abs(box[3] - boxes_h) < h_delta))[0])                    # 同行框
+        idxs_text = set(np.where( boxes_whr > wh_r_th)[0])                                                                      # 宽高比大于阈值，认为是文字行
+
+        idxs = (idxs_l | idxs_r) & idxs_samel & idxs_text
+        if len(idxs) == 0:                                  # 没有同行左或右相邻的框
+            new_boxes.append(tuple(list(box))) 
+        else:
+            tmp_boxes = boxes[np.array(list(idxs)+[i])]
+            x = tmp_boxes[:,0].min()
+            y = tmp_boxes[:,1].min()
+            bb_w = (tmp_boxes[:,0]+ tmp_boxes[:,2]).max() - x
+            bb_h = (tmp_boxes[:,1]+ tmp_boxes[:,3]).max() - y
+            new_boxes.append((x,y,bb_w,bb_h))
+    new_boxes = list(set(new_boxes))
+    return new_boxes
+
+
+def get_item_boxs(img,r = 1,ksize = 3,close = True,mergebox = False):
     '''
     获取元素框，包括文字和图标
     输入：
@@ -262,7 +292,7 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True):
     '''
     t1 = time.time()
     ori_h,ori_w = img.shape[:2]
-    # draw_img2 = img.copy()
+    draw_img2 = img.copy()
     if r != 1:
         img = cv2.resize(img,(int(ori_w*r),int(ori_h*r)),cv2.INTER_LANCZOS4)
     # 灰度化
@@ -282,9 +312,14 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True):
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(ksize,ksize))
     if close:
         edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel)
+    t4 = time.time()
+    logging.debug(f"morph close cost: {t4-t3}")
     
     # 查找剩余轮廓
     contours,hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    t5 = time.time()
+    logging.debug(f"findContours cost: {t5-t4}")
+
     boxes = []
     # 过滤box
     for contour in contours:
@@ -297,9 +332,24 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True):
         # 映射回原始尺寸
         box = (int(x/r), int(y/r), int(bb_w/r), int(bb_h/r))
         boxes.append(box)
+    
+    t6 = time.time()
+    logging.debug(f"filter boxes cost: {t6-t5}")
+
+    # 拼接相邻的box
+    if mergebox:
+        old_boxes = boxes
+        for i in range(10):
+            boxes = merge_boxes(old_boxes)
+            if len(boxes) == len(old_boxes):
+                break
+            old_boxes = boxes
+        t7 = time.time()
+        logging.debug(f"merge boxes cost: {t7-t6}")
+
     return boxes
 
-def page_items_rec(img,r=1,ksize = 3):
+def page_items_rec(img,r=1,ksize = 3,mergebox = False,use_mp = False, process_num = 1):
     '''
     页面元素识别
     输入：
@@ -311,71 +361,13 @@ def page_items_rec(img,r=1,ksize = 3):
     '''
     t1 = time.time()
     # 获取所有的元素位置（文本+图标）
-    boxes = get_item_boxs(img,r,ksize = ksize)
+    boxes = get_item_boxs(img, r, ksize = ksize, mergebox = mergebox)
     t2 = time.time()
-    logging.debug(f"get boxes cost: {t2 - t1}")
+    logging.debug(f"get {len(boxes)} boxes cost: {t2 - t1}")
 
     results = []
     # 调用OCR识别
-    # results = ocr_handle.crnnRecWithBox(np.array(img),boxes)
-    results = ocr_handle.PPRecWithBox(np.array(img),boxes)
+    results = ocr_predict(np.array(img),boxes,use_mp, process_num)
     logging.debug(f"OCR cost: {time.time()-t2}")
 
     return results
-
-
-
-if __name__ == "__main__":
-    
-    # 测试图片路径
-    data_home = "F:/Datasets/securety/页面识别/chrome"
-    # data_home = "F:/Datasets/securety/页面识别/jindie/image1"
-    imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
-    
-    # 参数设置
-    r = 1                                                               # 缩放比例
-    score_th = 0.8                                                      # 置信度阈值，用于划分文字和图标
-    ocr_handle = model.OcrHandle("models/pprec_v2.onnx",32,1)           # 初始化OCR识别模型
-    # ocr_handle = model.OcrHandle("models/pprec.onnx",48,1)
-    # ocr_handle = model.OcrHandle("models/crnn_lite_lstm.onnx",32,1)
-    
-    # 统计耗时
-    times = []
-    start = 1
-    for i,item in enumerate(imgs[start:]):
-        logging.debug("#"*200)
-        logging.debug(f"{i} {item}")
-        image_path = os.path.join(data_home,item)
-        img = np.array(Image.open(image_path).convert("RGB"))           # 直接转RGB
-        draw_img2 = img[:,:,::-1].copy()                                # 转成BGR为了显示和保存结果
-        ori_h,ori_w = img.shape[:2]
-        
-        t1 = time.time() 
-        icos = []
-        texts = []
-
-        # 页面元素检测（文本+图标）
-        results = page_items_rec(img,r,ksize = 3)
-        trec = time.time()
-        logging.debug(f"total cost: {trec-t1}")
-        times.append(trec -t1)
-
-        # 区分文字和图标
-        for result in results:
-            box,text,prob = result
-            logging.debug(result)
-            if prob > score_th:
-                texts.append(result)
-                cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(0,0,255),2)
-            else:
-                icos.append(result)
-                cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),2)
-
-        cv2.namedWindow(f'result',0)
-        cv2.imshow(f"result",draw_img2)
-        cv2.waitKey(0)
-        # cv2.imwrite(f"result2/{item}",draw_img2)
-        # cv2.imwrite(f"result_chrome/{item}",draw_img2)
-        
-    
-    logging.debug(f"平均耗时：{np.mean(times)}")
