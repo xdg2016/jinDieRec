@@ -1,14 +1,10 @@
-from distutils.command.install_egg_info import to_filename
 import time
-from PIL import  Image
 import numpy as np
-import cv2
 from .keys import alphabetChinese as alphabet
-# from keys import alphabetChinese as alphabet
-
+import os,sys
 import onnxruntime as rt
-# from util import strLabelConverter, resizeNormalize
 from .util import strLabelConverter, resizeNormalize
+
 converter = strLabelConverter(''.join(alphabet))
 
 def softmax(x):
@@ -25,12 +21,19 @@ class PPrecHandle:
     '''
     百度的识别模型
     '''
-    def __init__(self, model_path):
-
-        self.sess = rt.InferenceSession(model_path)
-
+    def __init__(self, model_path,keys_txt_path,in_names,out_names):
+        self.keys_txt_path = keys_txt_path
+        self.in_names = in_names
+        self.out_names = out_names
+        
+        sess_options = rt.SessionOptions()
+        sess_options.intra_op_num_threads = 16
+        sess_options.execution_mode = rt.ExecutionMode.ORT_SEQUENTIAL
+        sess_options.graph_optimization_level = rt.GraphOptimizationLevel.ORT_ENABLE_ALL
+        self.sess = rt.InferenceSession(model_path,sess_options= sess_options)
+ 
         self.character_str = []
-        character_dict_path = "models/ppocr_keys_v1.txt"
+        character_dict_path = keys_txt_path
         use_space_char = True
         if character_dict_path is None:
             self.character_str = "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -100,27 +103,42 @@ class PPrecHandle:
         """
         t1 = time.time()
         # pprec v2
-        preds = self.sess.run(["save_infer_model/scale_0.tmp_1"], {"x": im.astype(np.float32)}) # 12ms
+        # preds = self.sess.run(["save_infer_model/scale_0.tmp_1"], {"x": im.astype(np.float32)}) # 12ms
         # pprec v3
-        # preds = self.sess.run(["softmax_5.tmp_0"], {"x": im.astype(np.float32)})    
+        # preds = self.sess.run(["softmax_5.tmp_0"], {"x": im.astype(np.float32)})  
+        # paddle对应的pytorchOCR版本 
+        # preds = self.sess.run(["out"], {"in": im.astype(np.float32)})  
+        # rec_me
+        preds = self.sess.run(self.out_names, {self.in_names: im.astype(np.float32)}) # 12ms
+
         preds = preds[0]
 
+        # preds = softmax(preds)
         preds_idx = preds.argmax(axis=2)
         preds_prob = preds.max(axis=2)
+        
         text = self.decode(preds_idx, preds_prob, is_remove_duplicate=True)
 
         return text
 
 
 class CRNNHandle:
-    def __init__(self, model_path):
-        self.sess = rt.InferenceSession(model_path)
+    def __init__(self, model_path,keys_txt_path,in_names,out_names):
+        self.keys_txt_path = keys_txt_path
+        self.in_names = in_names
+        self.out_names = out_names
+        sess_options = rt.SessionOptions()
+        sess_options.intra_op_num_threads = 16
+        sess_options.execution_mode = rt.ExecutionMode.ORT_SEQUENTIAL
+        sess_options.graph_optimization_level = rt.GraphOptimizationLevel.ORT_ENABLE_ALL
+        self.sess = rt.InferenceSession(model_path,sess_options= sess_options)
+        # self.sess = rt.InferenceSession(model_path)
 
     def predict_rbg(self, im):
         """
         预测
         """
-        preds = self.sess.run(["out"], {"input": im.astype(np.float32)})
+        preds = self.sess.run(self.out_names, {self.in_names: im.astype(np.float32)})
         preds = preds[0]
 
         # pytorch crnn

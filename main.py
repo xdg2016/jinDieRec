@@ -5,6 +5,10 @@ import cv2
 import numpy as np
 from PIL import Image 
 import config
+import crnn.model as model
+
+# os.environ["OMP_NUM_THREADS"] = '16'
+
 '''
 测试页面文字和图标检测识别
 '''
@@ -17,10 +21,19 @@ if __name__ == "__main__":
     # data_home = "F:/Datasets/securety/tmp"
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
     
+    # 初始化模型
+    ocr_handle = model.OcrHandle(config.model_path,
+                                 config.infer_h,
+                                 config.batch,
+                                 config.keys_txt_path,
+                                 config.in_names,
+                                 config.out_names)
+    ocr_predict = ocr_handle.PPRecWithBox
+    # ocr_predict = ocr_handle.crnnRecWithBox
     
     # 统计耗时
     times = []
-    start = 14
+    start = 0
     boxes = []
     for i,item in enumerate(imgs[start:]):
         print("#"*200)
@@ -39,7 +52,8 @@ if __name__ == "__main__":
                                 r = config.r,
                                 mergebox = config.merge_box,
                                 use_mp =config.use_mp,
-                                process_num =config.process_num)
+                                process_num =config.process_num,
+                                ocr_predict = ocr_predict )
         trec = time.time()
         print(f"API cost: {trec-t1}")
         times.append(trec - t1)

@@ -4,7 +4,6 @@ import time
 import cv2
 import numpy as np
 import logging
-from config import ocr_predict
 
 log = logging.getLogger()
 log.setLevel("DEBUG")
@@ -349,7 +348,7 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True,mergebox = False):
 
     return boxes
 
-def page_items_rec(img,r=1,ksize = 3,mergebox = False,use_mp = False, process_num = 1):
+def page_items_rec(img,r=1,ksize = 3,mergebox = False,use_mp = False, process_num = 1,ocr_predict=None):
     '''
     页面元素识别
     输入：

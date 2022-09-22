@@ -5,10 +5,8 @@ import time
 import traceback
 import threading
 from multiprocessing.dummy import Pool as ThreadPool
-from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, FIRST_COMPLETED
 from crnn.util import get_rotate_crop_image
 from crnn.CRNN import CRNNHandle,PPrecHandle
-
 
 class MyThread(threading.Thread):
     def __init__(self, func, *args):	# 根据自身需求，将需要传出返回值的方法(func)和参数(args)传入,然后进行初始化
@@ -29,9 +27,9 @@ class MyThread(threading.Thread):
             return None
 
 class  OcrHandle(object):
-    def __init__(self,model_path,target_h = 32,batch_num = 8):
-        self.crnn_handle = CRNNHandle(model_path)
-        self.pprec_handle = PPrecHandle(model_path)
+    def __init__(self,model_path ,target_h ,batch_num,keys_txt_path,in_names,out_names ):
+        self.crnn_handle = CRNNHandle(model_path,keys_txt_path,in_names,out_names)
+        self.pprec_handle = PPrecHandle(model_path,keys_txt_path,in_names,out_names)
         self.target_h = target_h
         self.batch_num = batch_num
         self.total_results = []
