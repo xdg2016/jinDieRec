@@ -27,7 +27,7 @@ class MyThread(threading.Thread):
             return None
 
 class  OcrHandle(object):
-    def __init__(self,model_path ,target_h ,batch_num,keys_txt_path,in_names,out_names ):
+    def __init__(self,model_path ,target_h ,batch_num,keys_txt_path="",in_names="in",out_names=["out"] ):
         self.crnn_handle = CRNNHandle(model_path,keys_txt_path,in_names,out_names)
         self.pprec_handle = PPrecHandle(model_path,keys_txt_path,in_names,out_names)
         self.target_h = target_h

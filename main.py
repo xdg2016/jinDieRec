@@ -1,3 +1,5 @@
+import enum
+import random
 from rec import page_items_rec,log
 import os
 import time
@@ -12,13 +14,22 @@ import crnn.model as model
 '''
 测试页面文字和图标检测识别
 '''
+
+def make_dirs(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+
 if __name__ == "__main__":
     
     # 测试图片路径
     data_home = "F:/Datasets/securety/页面识别/chrome"
-    # data_home = "F:/Datasets/securety/页面识别/jindie/image8"
+    # data_home = "F:/Datasets/securety/页面识别/jindie/image1"
     # data_home = "Y:/zx-AI_lab/数据集/亚马逊页面识别/aws_gt"
+    # data_home = "Y:/zx-AI_lab/数据集/页面识别截图/速卖通全屏"
+    # data_home = "Y:/zx-AI_lab/数据集/页面识别截图/亚马逊窗口"
     # data_home = "F:/Datasets/securety/tmp"
+
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
     
     # 初始化模型
@@ -39,6 +50,7 @@ if __name__ == "__main__":
         print("#"*200)
         print(f"{i} {item}")
         image_path = os.path.join(data_home,item)
+        name = os.path.splitext(os.path.basename(image_path))[0]
         img = np.array(Image.open(image_path).convert("RGB"))           # 直接转RGB
         draw_img2 = img[:,:,::-1].copy()                                # 转成BGR为了显示和保存结果
         ori_h,ori_w = img.shape[:2]
@@ -59,15 +71,26 @@ if __name__ == "__main__":
         times.append(trec - t1)
         boxes.append(len(results))
         
+        img_save_dir = "F:/Datasets/OCR/cls/ori_imgs2"
+
         # 区分文字和图标
-        for result in results:
+        for i,result in enumerate(results):
             box,text,prob = result
             # print(result)
-            if prob > config.score_th:
+            # ROI = img[box[1]:box[3],box[0]:box[2]][:,:,::-1]
+            # if ROI.shape[0]< 3 or ROI.shape[1] < 3:
+            #     continue
+            if prob > config.score_th :
                 texts.append(result)
+                # text_dir = os.path.join(img_save_dir,"texts")
+                # make_dirs(text_dir)
+                # cv2.imwrite(os.path.join(text_dir,name+f"_{i}.jpg"),ROI)
                 cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(0,0,255),1)
-            else:
+            else :
                 icos.append(result)
+                # ico_dir = os.path.join(img_save_dir,"icos")
+                # make_dirs(ico_dir)
+                # cv2.imwrite(os.path.join(ico_dir,name+f"_{i}.jpg"),ROI)
                 cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),1)
 
         cv2.namedWindow(f'result',0)
