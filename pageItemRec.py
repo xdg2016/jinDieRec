@@ -4,6 +4,8 @@ import time
 import cv2
 import numpy as np
 import logging
+import crnn.model as model
+import config
 
 log = logging.getLogger()
 log.setLevel("DEBUG")
@@ -14,6 +16,17 @@ log.setLevel("DEBUG")
     OCR得到所有文字的坐标（去除置信度很低的）
     根据文字位置mask，对剩余的非文字部分，做sobel,轮廓检测，记录位置
 '''
+
+# 初始化模型
+ocr_handle = model.OcrHandle(config.model_path,
+                                 config.infer_h,
+                                 config.batch,
+                                 config.keys_txt_path,
+                                 config.in_names,
+                                 config.out_names)
+ocr_predict = ocr_handle.PPRecWithBox
+
+
 
 def edge_detect(img,thresh = 10):
     '''
@@ -348,15 +361,19 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True,mergebox = False):
 
     return boxes
 
-def page_items_rec(img,r=1,ksize = 3,mergebox = False,use_mp = False, process_num = 1,ocr_predict=None):
+def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp = config.use_mp, process_num = config.process_num):
     '''
     页面元素识别
     输入：
-        img:    待识别页面图像
-        r:      图形缩放比例
-        k_size: 闭运算的核大小
+        img:            待识别页面图像
+        r:              图形缩放比例，分辨率较高时可以缩放成较小的分辨率，减少耗时，常用缩放比例：3/4
+        k_size:         闭运算的核大小
+        mergebox:       是否合并检测框
+        use_mp:         使用多线程
+        process_num:    线程数
     返回：
-        识别结果: box,text,prob
+        文本集合: texts
+        图标集合: icos
     '''
     t1 = time.time()
     # 获取所有的元素位置（文本+图标）
@@ -369,4 +386,15 @@ def page_items_rec(img,r=1,ksize = 3,mergebox = False,use_mp = False, process_nu
     results = ocr_predict(np.array(img),boxes,use_mp, process_num)
     logging.debug(f"OCR cost: {time.time()-t2}")
 
-    return results
+    # 对结果进行分类,区分文字和图标
+    texts = []
+    icos = []
+
+    for i,result in enumerate(results):
+        box,text,prob = result
+        if prob > config.score_th :
+            texts.append(result)
+        else :
+            icos.append(result)
+
+    return texts,icos

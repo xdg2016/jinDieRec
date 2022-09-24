@@ -1,6 +1,6 @@
 import enum
 import random
-from rec import page_items_rec,log
+from pageItemRec import page_items_rec,log
 import os
 import time
 import cv2
@@ -32,16 +32,6 @@ if __name__ == "__main__":
 
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
     
-    # 初始化模型
-    ocr_handle = model.OcrHandle(config.model_path,
-                                 config.infer_h,
-                                 config.batch,
-                                 config.keys_txt_path,
-                                 config.in_names,
-                                 config.out_names)
-    ocr_predict = ocr_handle.PPRecWithBox
-    # ocr_predict = ocr_handle.crnnRecWithBox
-    
     # 统计耗时
     times = []
     start = 0
@@ -60,38 +50,26 @@ if __name__ == "__main__":
         texts = []
 
         # 页面元素检测（文本+图标）
-        results = page_items_rec(img,
-                                r = config.r,
-                                mergebox = config.merge_box,
-                                use_mp =config.use_mp,
-                                process_num =config.process_num,
-                                ocr_predict = ocr_predict )
+        texts,icos = page_items_rec(img,
+                                    r = config.r,
+                                    mergebox = config.merge_box,
+                                    use_mp =config.use_mp,
+                                    process_num =config.process_num,
+                                    )
         trec = time.time()
         print(f"API cost: {trec-t1}")
         times.append(trec - t1)
-        boxes.append(len(results))
+        boxes.append(len(texts)+len(icos))
         
         img_save_dir = "F:/Datasets/OCR/cls/ori_imgs2"
 
-        # 区分文字和图标
-        for i,result in enumerate(results):
+        # 显示文字和图标
+        for i,result in enumerate(texts):
             box,text,prob = result
-            # print(result)
-            # ROI = img[box[1]:box[3],box[0]:box[2]][:,:,::-1]
-            # if ROI.shape[0]< 3 or ROI.shape[1] < 3:
-            #     continue
-            if prob > config.score_th :
-                texts.append(result)
-                # text_dir = os.path.join(img_save_dir,"texts")
-                # make_dirs(text_dir)
-                # cv2.imwrite(os.path.join(text_dir,name+f"_{i}.jpg"),ROI)
-                cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(0,0,255),1)
-            else :
-                icos.append(result)
-                # ico_dir = os.path.join(img_save_dir,"icos")
-                # make_dirs(ico_dir)
-                # cv2.imwrite(os.path.join(ico_dir,name+f"_{i}.jpg"),ROI)
-                cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),1)
+            cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(0,0,255),1)
+        for i,result in enumerate(icos):
+            box,text,prob = result 
+            cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),1)
 
         cv2.namedWindow(f'result',0)
         cv2.imshow(f"result",draw_img2)
