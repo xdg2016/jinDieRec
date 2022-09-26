@@ -1,11 +1,11 @@
-from concurrent.futures import process
-
 import time
 import cv2
 import numpy as np
 import logging
 import crnn.model as model
+from crnn import pp_pred
 import config
+import cls.cls as cls 
 
 log = logging.getLogger()
 log.setLevel("DEBUG")
@@ -18,14 +18,26 @@ log.setLevel("DEBUG")
 '''
 
 # 初始化模型
-ocr_handle = model.OcrHandle(config.model_path,
+# OCR识别
+ocr_predict = pp_pred.PPrecPredictor(config.model_path,
                                  config.infer_h,
                                  config.batch,
                                  config.keys_txt_path,
                                  config.in_names,
                                  config.out_names)
-ocr_predict = ocr_handle.PPRecWithBox
 
+# ocr_handle = model.OcrHandle(config.model_path,
+#                                  config.infer_h,
+#                                  config.batch,
+#                                  config.keys_txt_path,
+#                                  config.in_names,
+#                                  config.out_names)
+# ocr_predict = ocr_handle.PPRecWithBox
+
+# 文本和图标分类
+text_classifier = cls.TextClassifier(config.cls_model_path,
+                                 config.cls_in_names,
+                                 config.cls_out_names)
 
 
 def edge_detect(img,thresh = 10):
@@ -372,8 +384,10 @@ def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp 
         use_mp:         使用多线程
         process_num:    线程数
     返回：
-        文本集合: texts
-        图标集合: icos
+        结果字典: {"texts":[ ((x,y,w,h),'文字内容'),
+                            ......,],
+                   "icos":[(x,y,w,h),
+                            ......,]}
     '''
     t1 = time.time()
     # 获取所有的元素位置（文本+图标）
@@ -381,20 +395,25 @@ def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp 
     t2 = time.time()
     logging.debug(f"get {len(boxes)} boxes cost: {t2 - t1}")
 
-    results = []
-    # 调用OCR识别
-    results = ocr_predict(np.array(img),boxes,use_mp, process_num)
-    logging.debug(f"OCR cost: {time.time()-t2}")
-
-    # 对结果进行分类,区分文字和图标
+    # 图标和文本分类
+    cls_results = text_classifier(img,boxes,process_num=process_num)
     texts = []
     icos = []
+    for result in cls_results:
+        box,img,cls,prob = result
+        if cls == "text":
+            texts.append((box,img))
+        else:
+            icos.append((box))
+    t3 = time.time()
+    logging.debug(f"cls cost: {t3-t2}")
 
-    for i,result in enumerate(results):
-        box,text,prob = result
-        if prob > config.score_th :
-            texts.append(result)
-        else :
-            icos.append(result)
+    results = []
+    # 调用OCR识别
+    ocr_results = ocr_predict(texts,use_mp, process_num)
+    logging.debug(f"OCR num {len(texts)} cost: {time.time()-t3}")
 
-    return texts,icos
+    # 对结果进行分类,区分文字和图标
+    results = {"texts":ocr_results,
+               "icos":icos}
+    return results
