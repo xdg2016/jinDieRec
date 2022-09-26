@@ -1,13 +1,9 @@
-import enum
-import random
 from pageItemRec import page_items_rec,log
 import os
 import time
 import cv2
 import numpy as np
 from PIL import Image 
-import config
-import crnn.model as model
 
 # os.environ["OMP_NUM_THREADS"] = '16'
 
@@ -50,12 +46,10 @@ if __name__ == "__main__":
         texts = []
 
         # 页面元素检测（文本+图标）
-        texts,icos = page_items_rec(img,
-                                    r = config.r,
-                                    mergebox = config.merge_box,
-                                    use_mp =config.use_mp,
-                                    process_num =config.process_num,
-                                    )
+        results = page_items_rec(img,
+                                use_mp =True,
+                                process_num = 10,
+                                )
         trec = time.time()
         print(f"API cost: {trec-t1}")
         times.append(trec - t1)
@@ -64,16 +58,16 @@ if __name__ == "__main__":
         img_save_dir = "F:/Datasets/OCR/cls/ori_imgs2"
 
         # 显示文字和图标
-        for i,result in enumerate(texts):
+        for i,result in enumerate(results["texts"]):
             box,text,prob = result
-            cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(0,0,255),1)
-        for i,result in enumerate(icos):
+            cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(0,0,255),1)
+        for i,result in enumerate(results["icos"]):
             box,text,prob = result 
-            cv2.rectangle(draw_img2,(box[0],box[1]),(box[2],box[3]),(255,0,0),1)
+            cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(255,0,0),1)
 
-        cv2.namedWindow(f'result',0)
-        cv2.imshow(f"result",draw_img2)
-        cv2.waitKey(0)
+        # cv2.namedWindow(f'result',0)
+        # cv2.imshow(f"result",draw_img2)
+        # cv2.waitKey(0)
         # cv2.imwrite(f"result2/{item}",draw_img2)
         # cv2.imwrite(f"result_chrome/{item}",draw_img2)
         

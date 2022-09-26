@@ -6,6 +6,7 @@ import numpy as np
 import logging
 import crnn.model as model
 import config
+from crnn import pp_pred
 
 log = logging.getLogger()
 log.setLevel("DEBUG")
@@ -18,13 +19,20 @@ log.setLevel("DEBUG")
 '''
 
 # 初始化模型
-ocr_handle = model.OcrHandle(config.model_path,
+# ocr_handle = model.OcrHandle(config.model_path,
+#                                  config.infer_h,
+#                                  config.batch,
+#                                  config.keys_txt_path,
+#                                  config.in_names,
+#                                  config.out_names)
+# ocr_predict = ocr_handle.PPRecWithBox
+
+ocr_predict = pp_pred.PPrecPredictor(config.model_path,
                                  config.infer_h,
                                  config.batch,
                                  config.keys_txt_path,
                                  config.in_names,
                                  config.out_names)
-ocr_predict = ocr_handle.PPRecWithBox
 
 
 
@@ -383,18 +391,18 @@ def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp 
 
     results = []
     # 调用OCR识别
-    results = ocr_predict(np.array(img),boxes,use_mp, process_num)
-    logging.debug(f"OCR cost: {time.time()-t2}")
+    ocr_results = ocr_predict(np.array(img),boxes,use_mp, process_num)
+    logging.debug(f"OCR num {len(boxes)} cost: {time.time()-t2}")
 
     # 对结果进行分类,区分文字和图标
     texts = []
     icos = []
-
-    for i,result in enumerate(results):
+    for i,result in enumerate(ocr_results):
         box,text,prob = result
         if prob > config.score_th :
             texts.append(result)
         else :
             icos.append(result)
-
-    return texts,icos
+    results = {"texts":texts,
+               "icos":icos}
+    return results
