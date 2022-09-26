@@ -110,6 +110,7 @@ class PPrecHandle:
         # preds = self.sess.run(["out"], {"in": im.astype(np.float32)})  
         # rec_me
         preds = self.sess.run(self.out_names, {self.in_names: im.astype(np.float32)}) # 12ms
+        # print("run cost: ",time.time()-t1)
 
         preds = preds[0]
 

@@ -1,3 +1,4 @@
+from re import X
 from PIL import Image
 import numpy as np
 import cv2
@@ -67,7 +68,11 @@ class  OcrHandle(object):
         '''
         numpy格式转列表格式
         '''
-        return npbox[0][0],npbox[0][1],npbox[3][0],npbox[3][1]
+        x = npbox[0][0]
+        y = npbox[0][1]
+        w = npbox[2][0] - x + 1
+        h = npbox[2][1] - y + 1
+        return x,y,w,h
 
     def check_edge(self,x,y,bb_w,bb_h,h,w):
         '''
@@ -124,7 +129,7 @@ class  OcrHandle(object):
                     if  not (box[2] > 3 and box[3] > 3 and box[2] / box[3] < 50):
                         continue
                     x,y,bb_w,bb_h = box 
-                    box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
+                    box = np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])
                     # 裁剪
                     partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
                     partImg = self.preprocess(partImg_array.astype(np.float32))
@@ -154,7 +159,7 @@ class  OcrHandle(object):
                 pool.join()
                 used_boxes = set([box[1] for box in datas])
                 rest_boxes = list(set(boxes_list) - used_boxes)
-                results.extend([(self.npbox2box(np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])),"",0) for x,y,bb_w,bb_h in rest_boxes])
+                results.extend([(self.npbox2box(np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])),"",0) for x,y,bb_w,bb_h in rest_boxes])
 
                 # 多线程方法三
                 # pool = ThreadPoolExecutor(max_workers=10)
@@ -180,7 +185,7 @@ class  OcrHandle(object):
                 # y -= delta 
                 # bb_w += 2*delta
                 # bb_h += 2*delta
-                box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
+                box = np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])
                 partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
                 # partImg_array = self.cutbox(partImg_array)
                 # cv2.imwrite(f"tmp/{img_num}.png",partImg_array)
@@ -226,18 +231,18 @@ class  OcrHandle(object):
         im,box = data
         x,y,bb_w,bb_h = box 
         # 外扩delta个像素
-        x,y,bb_w,bb_h = self.expand(x,y,bb_w,bb_h,im.shape[0],im.shape[1],2)
-        box = np.array([[x,y],[x+bb_w,y],[x,y+bb_h],[x+bb_w,y+bb_h]])
+        # x,y,bb_w,bb_h = self.expand(x,y,bb_w,bb_h,im.shape[0],im.shape[1],2)
+        box = np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])
         try:
             # 裁剪
-            partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
-            partImg = self.preprocess(partImg_array.astype(np.float32))
+            # partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
+            partImg = self.preprocess(im.astype(np.float32))
             result = self.pprec_handle.predict_rbg(partImg)  ##识别的文本
         except Exception as e:
             print(traceback.format_exc())
             result = [("",0)]
         simPred,prob = result[0]
-        return self.npbox2box(box),simPred,prob
+        return self.npbox2box(box),simPred
 
     def PPRecWithBox(self,im,boxes_list,use_mp = False, process_num = 1):
         """
@@ -346,6 +351,48 @@ class  OcrHandle(object):
                     results.append([self.npbox2box(batch_boxes[i]),simPred,score])
                 # print("batch time: " ,time.time()-t4)
             print("all cost: ",time.time()-t1)
+        return results
+
+    def PPRecWithBox(self,texts_list,use_mp = False, process_num = 1):
+        """
+        crnn模型，ocr识别
+        @@model,
+        @@converter,
+        @@im:Array
+        @@text_recs:text box
+        @@ifIm:是否输出box对应的img
+        """
+
+        results = []
+        if not use_mp:
+            # 不用多线程
+            for box,im in texts_list:
+                if  not (box[2] > 3 and box[3] > 3 and box[2] / box[3] < 50):
+                    continue
+                x,y,bb_w,bb_h = box 
+                box = np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])
+                # 裁剪
+                # partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
+                partImg = self.preprocess(im.astype(np.float32))
+                try:
+                    result = self.pprec_handle.predict_rbg(partImg)  ##识别的文本
+                except Exception as e:
+                    print(traceback.format_exc())
+                    continue
+                simPred,prob = result[0]
+                results.append([self.npbox2box(box),simPred])
+        else:
+            # 多线程方法二（更快）
+            datas = [(im,box) for box,im in texts_list if box[2] > 3 and box[3] > 3 and box[2] / box[3] < 50]
+            pool = ThreadPool(processes = process_num)
+            results = pool.map(self.pp_predict, datas)
+            pool.close()
+            pool.join()
+            used_boxes = set([box[1] for box in datas])         # 做了识别的框
+            text_boxes = set([box[0] for box in texts_list])    # 所有框
+            rest_boxes = list(text_boxes - used_boxes)          # 剩余未做识别的框
+            results.extend([(self.npbox2box(np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])),"") for x,y,bb_w,bb_h in rest_boxes])
+
         return results
 
 if __name__ == "__main__":
