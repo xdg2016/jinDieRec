@@ -380,8 +380,10 @@ def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp 
         use_mp:         使用多线程
         process_num:    线程数
     返回：
-        文本集合: texts
-        图标集合: icos
+        结果字典: {"texts":[ ((x,y,w,h),'文字内容',conf),
+                            ......,],
+                   "icos":[ ((x,y,w,h),'文字内容',conf),
+                            ......,]}
     '''
     t1 = time.time()
     # 获取所有的元素位置（文本+图标）
