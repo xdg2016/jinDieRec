@@ -382,7 +382,7 @@ def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp 
     返回：
         结果字典: {"texts":[ ((x,y,w,h),'文字内容',conf),
                             ......,],
-                   "icos":[ ((x,y,w,h),'文字内容',conf),
+                   "icos":[ (x,y,w,h),
                             ......,]}
     '''
     t1 = time.time()
@@ -404,7 +404,7 @@ def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp 
         if prob > config.score_th :
             texts.append(result)
         else :
-            icos.append(result)
+            icos.append(box)
     results = {"texts":texts,
                "icos":icos}
     return results
