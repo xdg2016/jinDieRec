@@ -47,7 +47,8 @@ if __name__ == "__main__":
 
         # 页面元素检测（文本+图标）
         results = page_items_rec(img,
-                                use_mp =True,
+                                r = 3/4,
+                                use_mp  = True,
                                 process_num = 10,
                                 )
         trec = time.time()
