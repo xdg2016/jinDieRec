@@ -919,3 +919,10 @@ crnn/__pycache__/pp_pred.cpython-38.pyc
 crnn/__pycache__/__init__.cpython-38.pyc
 crnn/__pycache__/CRNN.cpython-38.pyc
 crnn/__pycache__/model.cpython-38.pyc
+__pycache__/config.cpython-38.pyc
+__pycache__/pageItemRec.cpython-38.pyc
+cls/__pycache__/__init__.cpython-38.pyc
+cls/__pycache__/cls.cpython-38.pyc
+crnn/__pycache__/__init__.cpython-38.pyc
+crnn/__pycache__/CRNN.cpython-38.pyc
+crnn/__pycache__/model.cpython-38.pyc
