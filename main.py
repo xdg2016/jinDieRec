@@ -33,7 +33,7 @@ if __name__ == "__main__":
     start = 0
     boxes = []
     for i,item in enumerate(imgs[start:]):
-        print("#"*200)
+        print("#"*100)
         print(f"{i} {item}")
         image_path = os.path.join(data_home,item)
         name = os.path.splitext(os.path.basename(image_path))[0]
@@ -62,7 +62,7 @@ if __name__ == "__main__":
             box,text,prob = result
             cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(0,0,255),1)
         for i,result in enumerate(results["icos"]):
-            box,text,prob = result 
+            box = result 
             cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(255,0,0),1)
 
         # cv2.namedWindow(f'result',0)
