@@ -47,6 +47,7 @@ if __name__ == "__main__":
 
         # 页面元素检测（文本+图标）
         results = page_items_rec(img,
+                                 r = 1,
                                  use_mp = True,
                                  process_num = 10
                                 )
