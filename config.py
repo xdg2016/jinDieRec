@@ -23,7 +23,7 @@ keys_txt_path = "models/ppocr_keys_v1.txt"
 # out_names = ["softmax_5.tmp_0"]
 # keys_txt_path = "models/ppocr_keys_v1.txt"
 
-#ppocr_v2_me 自己训练
+#ppocr_v2_me 自己训练(耗时较低)
 # model_path = "models/pprec_v2_me.onnx"
 # in_names = "x"
 # out_names = ["softmax_0.tmp_0"]
