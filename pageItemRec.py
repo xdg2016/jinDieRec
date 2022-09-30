@@ -417,3 +417,28 @@ def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp 
     results = {"texts":ocr_results,
                "icos":icos}
     return results
+
+
+def get_text_icos(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp = config.use_mp, process_num = config.process_num):
+    '''
+    只做文本和图标的检测和分类
+    '''
+    t1 = time.time()
+    # 获取所有的元素位置（文本+图标）
+    boxes = get_item_boxs(img, r, ksize = ksize, mergebox = mergebox)
+    t2 = time.time()
+    logging.debug(f"get {len(boxes)} boxes cost: {t2 - t1}")
+
+    # 图标和文本分类
+    cls_results = text_classifier(img,boxes,process_num=process_num)
+    texts = []
+    icos = []
+    for result in cls_results:
+        box,img,cls,prob = result
+        if cls == "text":
+            texts.append((box,img))
+        else:
+            icos.append((box))
+    t3 = time.time()
+    logging.debug(f"cls cost: {t3-t2}")
+    return texts,icos
