@@ -1,4 +1,4 @@
-from pageItemRec import page_items_rec,log
+from pageItemRec import page_items_rec
 import os
 import time
 import cv2
@@ -19,14 +19,15 @@ def make_dirs(path):
 if __name__ == "__main__":
     
     # 测试图片路径
-    data_home = "F:/Datasets/securety/页面识别/chrome"
+    data_home = "F:/Datasets/securety/PageRec/test_data/test/imgs"
     # data_home = "F:/Datasets/securety/页面识别/jindie/image1"
     # data_home = "Y:/zx-AI_lab/数据集/亚马逊页面识别/aws_gt"
     # data_home = "Y:/zx-AI_lab/数据集/页面识别截图/速卖通全屏"
     # data_home = "Y:/zx-AI_lab/数据集/页面识别截图/亚马逊窗口"
     # data_home = "F:/Datasets/securety/tmp"
+    data_home = "F:/Datasets/securety/PageRec/原始标注数据/测试/jindie/image1"
 
-    imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".png",".webp"]]
+    imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".jpg",".png",".webp"]]
     
     # 统计耗时
     times = []
@@ -61,14 +62,15 @@ if __name__ == "__main__":
         # 显示文字和图标
         for i,result in enumerate(results["texts"]):
             box,text = result
-            cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(0,0,255),1)
+            print(text)
+            cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(0,0,255),2)
         for i,result in enumerate(results["icos"]):
             box = result 
-            cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(255,0,0),1)
+            cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(255,0,0),2)
 
-        # cv2.namedWindow(f'result',0)
-        # cv2.imshow(f"result",draw_img2)
-        # cv2.waitKey(0)
+        cv2.namedWindow(f'result',0)
+        cv2.imshow(f"result",draw_img2)
+        cv2.waitKey(0)
         # cv2.imwrite(f"result2/{item}",draw_img2)
         # cv2.imwrite(f"result_chrome/{item}",draw_img2)
         

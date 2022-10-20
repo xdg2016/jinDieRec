@@ -17,35 +17,20 @@ in_names = "x"
 out_names = ["save_infer_model/scale_0.tmp_1"]
 keys_txt_path = "models/ppocr_keys_v1.txt"
 
-# pprec_v3 官方
-# infer_h = 48
-# in_names = "x"
-# out_names = ["softmax_5.tmp_0"]
-# keys_txt_path = "models/ppocr_keys_v1.txt"
-
-#ppocr_v2_me 自己训练(耗时较低)
-# model_path = "models/pprec_v2_me.onnx"
-# in_names = "x"
-# out_names = ["softmax_0.tmp_0"]
-# keys_txt_path = "models/keys.txt"
-
-#----------------------------------- pytorch系列 -------------------------------------------#
-
-# pytorch-crnn
-# model_path = "models/crnn_lite_lstm.onnx"
-# in_names = "input"
-# out_names = ["out"]
-# keys_txt_path = "models/keys.txt"
-
-# paddel对应的官方pytorchOCR
-# model_path = "models/rec.onnx"
-# in_names = "in"
-# out_names = ["out"]
-
 
 # 图标和文本分类参数
-
 cls_batch = 1
 cls_model_path = "models/cls.onnx"
 cls_in_names = "x"
 cls_out_names = ["softmax_0.tmp_0"]
+
+
+#----------------------------------- 文本图标检测 -------------------------------------------#
+# 模型路径（pp-yolo-E）
+det_model_path = "models/ppyoloe_crn_s_300e_coco_text_ico_1014.onnx"
+# 类别列表
+label_path = "det/label_list_text_ico.txt"
+# 显示置信度阈值
+confThreshold = 0.5
+# nms阈值
+nmsThreshold = 0.3

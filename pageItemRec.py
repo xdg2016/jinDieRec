@@ -6,6 +6,7 @@ import crnn.model as model
 from crnn import pp_pred
 import config
 import cls.cls as cls 
+from det.picodet import PicoDet
 
 log = logging.getLogger()
 log.setLevel("DEBUG")
@@ -26,18 +27,15 @@ ocr_predict = pp_pred.PPrecPredictor(config.model_path,
                                  config.in_names,
                                  config.out_names)
 
-# ocr_handle = model.OcrHandle(config.model_path,
-#                                  config.infer_h,
-#                                  config.batch,
-#                                  config.keys_txt_path,
-#                                  config.in_names,
-#                                  config.out_names)
-# ocr_predict = ocr_handle.PPRecWithBox
-
 # 文本和图标分类
-text_classifier = cls.TextClassifier(config.cls_model_path,
-                                 config.cls_in_names,
-                                 config.cls_out_names)
+# text_classifier = cls.TextClassifier(config.cls_model_path,
+#                                  config.cls_in_names,
+#                                  config.cls_out_names)
+
+det_net = PicoDet(model_pb_path = config.det_model_path,
+                label_path = config.label_path,
+                prob_threshold = config.confThreshold,
+                iou_threshold=config.nmsThreshold)
 
 
 def edge_detect(img,thresh = 10):
@@ -373,6 +371,16 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True,mergebox = False):
 
     return boxes
 
+def xyxy2xywh(box):
+    xmin,ymin,xmax,ymax = box
+    x = int(float(xmin))
+    y = int(float(ymin))
+    w = int(float(xmax-xmin))+1
+    h = int(float(ymax-ymin))+1
+    box = x,y,w,h
+    return box
+
+
 def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp = config.use_mp, process_num = config.process_num):
     '''
     页面元素识别
@@ -389,31 +397,28 @@ def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp 
                    "icos":[(x,y,w,h),
                             ......,]}
     '''
-    t1 = time.time()
+    
     # 获取所有的元素位置（文本+图标）
-    boxes = get_item_boxs(img, r, ksize = ksize, mergebox = mergebox)
-    t2 = time.time()
-    logging.debug(f"get {len(boxes)} boxes cost: {t2 - t1}")
-
-    # 图标和文本分类
-    cls_results = text_classifier(img,boxes,process_num=process_num)
+    t1 = time.time()
+    det_results = det_net.detect_onnx(img,True)
+    logging.debug(f"det cost: {time.time()-t1}")
     texts = []
     icos = []
-    for result in cls_results:
-        box,img,cls,prob = result
-        if cls == "text":
+    for item in det_results:
+        cls_name = item["classname"]
+        box = xyxy2xywh(item["box"])
+        if cls_name == "text":
             texts.append((box,img))
         else:
-            icos.append((box))
-    t3 = time.time()
-    logging.debug(f"cls cost: {t3-t2}")
+            icos.append(box)
 
     results = []
-    # 调用OCR识别
+    # # 调用OCR识别
+    t2 = time.time()
     ocr_results = ocr_predict(texts,use_mp, process_num)
-    logging.debug(f"OCR num {len(texts)} cost: {time.time()-t3}")
+    logging.debug(f"OCR num {len(texts)} cost: {time.time()-t2}")
 
-    # 对结果进行分类,区分文字和图标
+    # # 对结果进行分类,区分文字和图标
     results = {"texts":ocr_results,
                "icos":icos}
     return results

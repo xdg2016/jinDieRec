@@ -5,6 +5,8 @@ import traceback
 from multiprocessing.dummy import Pool as ThreadPool
 import cv2
 
+from crnn.util import get_rotate_crop_image
+
 class PPrecPredictor:
     '''
     百度的识别模型
@@ -152,7 +154,7 @@ class PPrecPredictor:
     
     def pp_predict(self,data):
         '''
-        
+        多线程预测原子函数
         '''
         im,box = data
         x,y,bb_w,bb_h = box 
@@ -161,7 +163,7 @@ class PPrecPredictor:
         box = np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])
         try:
             # 裁剪
-            # partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
+            im = get_rotate_crop_image(im, box.astype(np.float32))
             partImg = self.preprocess(im.astype(np.float32))
             result = self.predict_rbg(partImg)  ##识别的文本
         except Exception as e:
