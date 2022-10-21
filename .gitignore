@@ -927,3 +927,5 @@ crnn/__pycache__/__init__.cpython-38.pyc
 crnn/__pycache__/CRNN.cpython-38.pyc
 crnn/__pycache__/model.cpython-38.pyc
 *.pyc
+__pycache__/config.cpython-38.pyc
+__pycache__/config.cpython-38.pyc

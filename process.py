@@ -23,7 +23,7 @@ def del_imgs_no_xml():
     '''
     删除没有xml的图片
     '''
-    data_home = "F:/Datasets/securety/聊天窗口识别/2022-09-29-全场景-labeled-1014/origin"
+    data_home = "F:/Datasets/securety/PageRec/原始标注数据/2022-09-29-全场景-labeled-1021"
     dirs = os.listdir(data_home)
     for dir in dirs:
         dir_path = os.path.join(data_home,dir)
@@ -42,8 +42,8 @@ def gen_train_val():
     生成训练验证数据集
     '''
     data_home = "F:/Datasets/securety/PageRec"
-    origin_data_home = data_home+"/原始标注数据/2022-09-29-全场景-labeled-1014/origin"
-    trainval_data_home = data_home+"/trainval_data/text_ico_2020-10-14"
+    origin_data_home = data_home+"/原始标注数据/2022-09-29-全场景-labeled-1021"
+    trainval_data_home = data_home+"/trainval_data/text_ico_2020-10-21"
     test_data_home = data_home+"/test_data"
     make_dirs(trainval_data_home)
     make_dirs(test_data_home)
@@ -103,9 +103,9 @@ def calculate_calss_nums():
     '''
     统计训练数据中每个类别的个数
     '''
-    data_home = "F:/Datasets/securety/PageRec/trainval_data/text_ico_2020-10-19"
+    data_home = "F:/Datasets/securety/PageRec/test_data"
 
-    trainf = open(os.path.join(data_home,"train.txt"))
+    trainf = open(os.path.join(data_home,"test.txt"))
     lines = trainf.readlines()
 
     class_nums = {}
@@ -566,5 +566,5 @@ def gen_text_ico_imgs():
 if __name__ == "__main__":
     # del_imgs_no_xml()
     # gen_train_val()
-    # calculate_calss_nums()
-    gen_text_ico_imgs()
+    calculate_calss_nums()
+    # gen_text_ico_imgs()

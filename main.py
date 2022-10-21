@@ -25,7 +25,7 @@ if __name__ == "__main__":
     # data_home = "Y:/zx-AI_lab/数据集/页面识别截图/速卖通全屏"
     # data_home = "Y:/zx-AI_lab/数据集/页面识别截图/亚马逊窗口"
     # data_home = "F:/Datasets/securety/tmp"
-    data_home = "F:/Datasets/securety/PageRec/原始标注数据/测试/jindie/image1"
+    # data_home = "F:/Datasets/securety/PageRec/原始标注数据/测试/jindie/image1"
 
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".jpg",".png",".webp"]]
     

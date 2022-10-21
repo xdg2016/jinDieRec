@@ -25,9 +25,9 @@ cls_in_names = "x"
 cls_out_names = ["softmax_0.tmp_0"]
 
 
-#----------------------------------- 文本图标检测 -------------------------------------------#
+# 文本图标检测
 # 模型路径（pp-yolo-E）
-det_model_path = "models/ppyoloe_crn_s_300e_coco_text_ico_1014.onnx"
+det_model_path = "models/ppyoloe_crn_s_300e_coco_text_ico_1021.onnx"
 # 类别列表
 label_path = "det/label_list_text_ico.txt"
 # 显示置信度阈值
