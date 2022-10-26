@@ -4,7 +4,8 @@ import time
 import traceback
 from multiprocessing.dummy import Pool as ThreadPool
 import cv2
-from .util import get_rotate_crop_image
+
+from crnn.util import get_rotate_crop_image
 
 class PPrecPredictor:
     '''
@@ -153,7 +154,7 @@ class PPrecPredictor:
     
     def pp_predict(self,data):
         '''
-        
+        多线程预测原子函数
         '''
         im,box = data
         x,y,bb_w,bb_h = box 
@@ -162,8 +163,8 @@ class PPrecPredictor:
         box = np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])
         try:
             # 裁剪
-            partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
-            partImg = self.preprocess(partImg_array.astype(np.float32))
+            im = get_rotate_crop_image(im, box.astype(np.float32))
+            partImg = self.preprocess(im.astype(np.float32))
             result = self.predict_rbg(partImg)  ##识别的文本
         except Exception as e:
             print(traceback.format_exc())
@@ -171,7 +172,7 @@ class PPrecPredictor:
         simPred,prob = result[0]
         return self.npbox2box(box),simPred,prob
 
-    def __call__(self,im ,texts_list,use_mp = False, process_num = 1):
+    def __call__(self,texts_list,use_mp = False, process_num = 1):
         
         """
         crnn模型，ocr识别
@@ -185,30 +186,31 @@ class PPrecPredictor:
         results = []
         if not use_mp:
             # 不用多线程
-            for box in texts_list:
+            for box,im in texts_list:
                 if  not (box[2] > 3 and box[3] > 3 and box[2] / box[3] < 50):
                     continue
                 x,y,bb_w,bb_h = box 
                 box = np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])
                 # 裁剪
-                partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
-                partImg = self.preprocess(partImg_array.astype(np.float32))
+                # partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
+                partImg = self.preprocess(im.astype(np.float32))
                 try:
                     result = self.predict_rbg(partImg)  ##识别的文本
                 except Exception as e:
                     print(traceback.format_exc())
                     continue
                 simPred,prob = result[0]
-                results.append([self.npbox2box(box),simPred,prob])
+                results.append([self.npbox2box(box),simPred])
         else:
             # 多线程方法二（更快）
-            datas = [(im,box) for box in texts_list if box[2] > 3 and box[3] > 3 and box[2] / box[3] < 50]
+            datas = [(im,box) for box,im in texts_list if box[2] > 3 and box[3] > 3 and box[2] / box[3] < 50]
             pool = ThreadPool(processes = process_num)
             results = pool.map(self.pp_predict, datas)
             pool.close()
             pool.join()
             used_boxes = set([box[1] for box in datas])         # 做了识别的框
-            rest_boxes = list(set(texts_list) - used_boxes)
+            text_boxes = set([box[0] for box in texts_list])    # 所有框
+            rest_boxes = list(text_boxes - used_boxes)          # 剩余未做识别的框
             results.extend([(self.npbox2box(np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])),"",0) for x,y,bb_w,bb_h in rest_boxes])
 
         return results
