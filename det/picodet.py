@@ -16,170 +16,7 @@ from time import time
 import cv2
 import numpy as np
 import onnxruntime as ort
-import paddle
-import paddle._C_ops as C_ops
 from config import *
-paddle.set_device('cpu')
-
-def multiclass_nms(bboxes,
-                   scores,
-                   score_threshold,
-                   nms_top_k,
-                   keep_top_k,
-                   nms_threshold=0.3,
-                   normalized=True,
-                   nms_eta=1.,
-                   background_label=-1,
-                   return_index=False,
-                   return_rois_num=True,
-                   rois_num=None,
-                   name=None):
-    """
-    This operator is to do multi-class non maximum suppression (NMS) on
-    boxes and scores.
-    In the NMS step, this operator greedily selects a subset of detection bounding
-    boxes that have high scores larger than score_threshold, if providing this
-    threshold, then selects the largest nms_top_k confidences scores if nms_top_k
-    is larger than -1. Then this operator pruns away boxes that have high IOU
-    (intersection over union) overlap with already selected boxes by adaptive
-    threshold NMS based on parameters of nms_threshold and nms_eta.
-    Aftern NMS step, at most keep_top_k number of total bboxes are to be kept
-    per image if keep_top_k is larger than -1.
-    Args:
-        bboxes (Tensor): Two types of bboxes are supported:
-                           1. (Tensor) A 3-D Tensor with shape
-                           [N, M, 4 or 8 16 24 32] represents the
-                           predicted locations of M bounding bboxes,
-                           N is the batch size. Each bounding box has four
-                           coordinate values and the layout is
-                           [xmin, ymin, xmax, ymax], when box size equals to 4.
-                           2. (LoDTensor) A 3-D Tensor with shape [M, C, 4]
-                           M is the number of bounding boxes, C is the
-                           class number
-        scores (Tensor): Two types of scores are supported:
-                           1. (Tensor) A 3-D Tensor with shape [N, C, M]
-                           represents the predicted confidence predictions.
-                           N is the batch size, C is the class number, M is
-                           number of bounding boxes. For each category there
-                           are total M scores which corresponding M bounding
-                           boxes. Please note, M is equal to the 2nd dimension
-                           of BBoxes.
-                           2. (LoDTensor) A 2-D LoDTensor with shape [M, C].
-                           M is the number of bbox, C is the class number.
-                           In this case, input BBoxes should be the second
-                           case with shape [M, C, 4].
-        background_label (int): The index of background label, the background
-                                label will be ignored. If set to -1, then all
-                                categories will be considered. Default: 0
-        score_threshold (float): Threshold to filter out bounding boxes with
-                                 low confidence score. If not provided,
-                                 consider all boxes.
-        nms_top_k (int): Maximum number of detections to be kept according to
-                         the confidences after the filtering detections based
-                         on score_threshold.
-        nms_threshold (float): The threshold to be used in NMS. Default: 0.3
-        nms_eta (float): The threshold to be used in NMS. Default: 1.0
-        keep_top_k (int): Number of total bboxes to be kept per image after NMS
-                          step. -1 means keeping all bboxes after NMS step.
-        normalized (bool): Whether detections are normalized. Default: True
-        return_index(bool): Whether return selected index. Default: False
-        rois_num(Tensor): 1-D Tensor contains the number of RoIs in each image. 
-            The shape is [B] and data type is int32. B is the number of images.
-            If it is not None then return a list of 1-D Tensor. Each element 
-            is the output RoIs' number of each image on the corresponding level
-            and the shape is [B]. None by default.
-        name(str): Name of the multiclass nms op. Default: None.
-    Returns:
-        A tuple with two Variables: (Out, Index) if return_index is True,
-        otherwise, a tuple with one Variable(Out) is returned.
-        Out: A 2-D LoDTensor with shape [No, 6] represents the detections.
-        Each row has 6 values: [label, confidence, xmin, ymin, xmax, ymax]
-        or A 2-D LoDTensor with shape [No, 10] represents the detections.
-        Each row has 10 values: [label, confidence, x1, y1, x2, y2, x3, y3,
-        x4, y4]. No is the total number of detections.
-        If all images have not detected results, all elements in LoD will be
-        0, and output tensor is empty (None).
-        Index: Only return when return_index is True. A 2-D LoDTensor with
-        shape [No, 1] represents the selected index which type is Integer.
-        The index is the absolute value cross batches. No is the same number
-        as Out. If the index is used to gather other attribute such as age,
-        one needs to reshape the input(N, M, 1) to (N * M, 1) as first, where
-        N is the batch size and M is the number of boxes.
-    Examples:
-        .. code-block:: python
-
-            import paddle
-            from ppdet.modeling import ops
-            boxes = paddle.static.data(name='bboxes', shape=[81, 4],
-                                      dtype='float32', lod_level=1)
-            scores = paddle.static.data(name='scores', shape=[81],
-                                      dtype='float32', lod_level=1)
-            out, index = ops.multiclass_nms(bboxes=boxes,
-                                            scores=scores,
-                                            background_label=0,
-                                            score_threshold=0.5,
-                                            nms_top_k=400,
-                                            nms_threshold=0.3,
-                                            keep_top_k=200,
-                                            normalized=False,
-                                            return_index=True)
-    """
-   
-    attrs = ('background_label', background_label, 'score_threshold',
-                score_threshold, 'nms_top_k', nms_top_k, 'nms_threshold',
-                nms_threshold, 'keep_top_k', keep_top_k, 'nms_eta', nms_eta,
-                'normalized', normalized)
-    output, index, nms_rois_num = C_ops.multiclass_nms3(bboxes, scores,
-                                                        rois_num, *attrs)
-    if not return_index:
-        index = None
-    return output, nms_rois_num, index
-
-class MultiClassNMS(object):
-    def __init__(self,
-                 score_threshold=.05,
-                 nms_top_k=-1,
-                 keep_top_k=100,
-                 nms_threshold=nmsThreshold,
-                 normalized=True,
-                 nms_eta=1.0,
-                 return_index=False,
-                 return_rois_num=True,
-                 trt=False):
-        super(MultiClassNMS, self).__init__()
-        self.score_threshold = score_threshold
-        self.nms_top_k = nms_top_k
-        self.keep_top_k = keep_top_k
-        self.nms_threshold = nms_threshold
-        self.normalized = normalized
-        self.nms_eta = nms_eta
-        self.return_index = return_index
-        self.return_rois_num = return_rois_num
-        self.trt = trt
-
-    def __call__(self, bboxes, score, background_label=-1):
-        """
-        bboxes (Tensor|List[Tensor]): 1. (Tensor) Predicted bboxes with shape 
-                                         [N, M, 4], N is the batch size and M
-                                         is the number of bboxes
-                                      2. (List[Tensor]) bboxes and bbox_num,
-                                         bboxes have shape of [M, C, 4], C
-                                         is the class number and bbox_num means
-                                         the number of bboxes of each batch with
-                                         shape [N,] 
-        score (Tensor): Predicted scores with shape [N, C, M] or [M, C]
-        background_label (int): Ignore the background label; For example, RCNN
-                                is num_classes and YOLO is -1. 
-        """
-        kwargs = self.__dict__.copy()
-        if isinstance(bboxes, tuple):
-            bboxes, bbox_num = bboxes
-            kwargs.update({'rois_num': bbox_num})
-        if background_label > -1:
-            kwargs.update({'background_label': background_label})
-        kwargs.pop('trt')
-        
-        return multiclass_nms(bboxes, score, **kwargs)
 
 class PicoDet():
     def __init__(self,
@@ -193,7 +30,6 @@ class PicoDet():
         self.num_classes = len(self.classes)
         self.prob_threshold = prob_threshold
         self.iou_threshold = iou_threshold
-        self.nms = MultiClassNMS()
 
         # 均值、标准差，用于归一化
         self.mean = np.array(
@@ -272,11 +108,11 @@ class PicoDet():
                     value=0)
         else:
             img = cv2.resize(
-                srcimg, self.input_shape, interpolation=2)
+                srcimg,  tuple(self.input_shape), interpolation=2)
 
         return img, img_shape, scale_factor
 
-    def detect_onnx(self, srcimg,modle_with_nms = False):
+    def detect_onnx(self, srcimg,modle_with_nms = True):
         '''
         目标检测模型推理接口
 
@@ -307,20 +143,6 @@ class PicoDet():
         result_list = []
         try:
             outs = self.net.run(None, net_inputs)
-            # print("run cost: ",time()-t1)
-            # 模型内部不带NMS，需自己加上NMS
-            if not modle_with_nms:
-                pred_bboxes,pred_scores = paddle.to_tensor(outs[0],place=paddle.CPUPlace()),paddle.to_tensor(outs[1],place=paddle.CPUPlace())
-                scale_factor_t = paddle.to_tensor(scale_factor,place=paddle.CPUPlace())
-                scale_y, scale_x = paddle.split(scale_factor_t, 2, axis=-1)
-                scale_factor_t = paddle.concat(
-                    [scale_x, scale_y, scale_x, scale_y],
-                    axis=-1).reshape([-1, 1, 4])
-                # scale bbox to origin image size.
-                pred_bboxes /= scale_factor_t
-                bbox_pred, bbox_num, _ = self.nms(pred_bboxes, pred_scores)
-                outs=[np.array(bbox_pred)]
-            
             outs = np.array(outs[0])
             # 过滤检测结果：置信度大于阈值，索引大于-1
             expect_boxes = (outs[:, 1] > self.prob_threshold) & (outs[:, 0] > -1)
