@@ -164,8 +164,11 @@ class PPrecPredictor:
         try:
             # 裁剪
             im = get_rotate_crop_image(im, box.astype(np.float32))
-            partImg = self.preprocess(im.astype(np.float32))
-            result = self.predict_rbg(partImg)  ##识别的文本
+            if im.shape[0] > 2 and im.shape[1] > 2:
+                partImg = self.preprocess(im.astype(np.float32))
+                result = self.predict_rbg(partImg)  ##识别的文本
+            else:
+                result = [("",0)]
         except Exception as e:
             print(traceback.format_exc())
             result = [("",0)]

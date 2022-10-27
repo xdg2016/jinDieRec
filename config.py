@@ -19,15 +19,13 @@ keys_txt_path = "models/ppocr_keys_v1.txt"
 
 # 文本图标检测
 # 模型路径（pp-yolo-E）
-# det_model_path = "models/ppyoloe_crn_s_300e_coco_text_ico_1021_350e_960.onnx"       # 推理尺寸960x960
-# det_model_path = "models/ppyoloe_crn_s_300e_coco_text_ico_1021_350e_768.onnx"     # 推理尺寸768x768
-det_model_path = "models/ppyoloe_crn_s_300e_coco_text_ico_1021_350e.onnx"     # 推理尺寸640x640
-
-# 模型路径（pp-yolo-E+）
-# det_model_path = "models/ppyoloe_plus_crn_s_80e_coco_text_ico_1021_300e.onnx"     # 推理尺寸640x640
+# det_model_path = "models/ppyoloe_crn_s_300e_coco_text_ico_1026_350e.onnx"     # 推理尺寸640x640
+det_model_path = "models/ppyoloe_crn_s_300e_coco_text_ico_1026_350e_768.onnx"     # 推理尺寸768x768
+# 自动切图+拼图模型路径
+slice_det_model_path = "models/ppyoloe_crn_s_300e_sliced_visdrone_640_025_text_ico.onnx"     # 推理尺寸640x640
 # 类别列表
 label_path = "det/label_list_text_ico.txt"
 # 显示置信度阈值
 confThreshold = 0.5
 # nms阈值
-nmsThreshold = 0.3
+nmsThreshold = 0.8

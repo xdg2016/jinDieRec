@@ -1,10 +1,8 @@
-from concurrent.futures import process
-
 import time
 import cv2
 import numpy as np
 import logging
-import crnn.model as model
+
 from crnn import pp_pred
 import config
 from det.picodet import PicoDet
@@ -31,7 +29,12 @@ ocr_predict = pp_pred.PPrecPredictor(config.model_path,
 det_net = PicoDet(model_pb_path = config.det_model_path,
                 label_path = config.label_path,
                 prob_threshold = config.confThreshold,
-                iou_threshold=config.nmsThreshold)
+                nms_threshold =config.nmsThreshold)
+# 切图拼图检测
+slice_det_net = PicoDet(model_pb_path = config.slice_det_model_path,
+                label_path = config.label_path,
+                prob_threshold = config.confThreshold,
+                nms_threshold =config.nmsThreshold)
 
 
 def edge_detect(img,thresh = 10):
@@ -377,24 +380,27 @@ def xyxy2xywh(box):
     return box
 
 
-def page_items_rec(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp = config.use_mp, process_num = config.process_num):
+def page_items_rec(img,slice = False, use_mp = config.use_mp, process_num = config.process_num):
     '''
     页面元素识别
     输入：
         img:            待识别页面图像
-        r:              图形缩放比例，分辨率较高时可以缩放成较小的分辨率，减少耗时，常用缩放比例：3/4
-        k_size:         闭运算的核大小
-        mergebox:       是否合并检测框
+        slice:          是否使用自动切图拼图的方式检测
         use_mp:         使用多线程
         process_num:    线程数
     返回：
         结果字典: {"texts":[ ((x,y,w,h),'文字内容',conf),
                             ......,],
-                   "icos":[ (x,y,w,h),
+                   "icos":[(x,y,w,h),
                             ......,]}
     '''
+    
+    # 获取所有的元素位置（文本+图标）
     t1 = time.time()
-    det_results = det_net.detect_onnx(img,True)
+    if slice:
+        det_results = slice_det_net.det_onnx_slice(img)
+    else:
+        det_results = det_net.det_onnx(img)
     logging.debug(f"det cost: {time.time()-t1}")
     texts = []
     icos = []
