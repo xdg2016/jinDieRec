@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
         # 页面元素检测（文本+图标）
         results = page_items_rec(img,
-                                 r = 1,
+                                 slice=False,
                                  use_mp = True,
                                  process_num = 10
                                 )
@@ -59,9 +59,9 @@ if __name__ == "__main__":
         
         img_save_dir = "F:/Datasets/OCR/cls/ori_imgs2"
 
-        # 显示文字和图标
+        # # 显示文字和图标
         for i,result in enumerate(results["texts"]):
-            box,text = result
+            box,text,conf = result
             print(text)
             cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(0,0,255),2)
         for i,result in enumerate(results["icos"]):

@@ -11,6 +11,7 @@ import cv2
 import math
 import xml.dom.minidom
 
+
 '''
 页面元素解析数据处理脚本
 '''
@@ -23,7 +24,7 @@ def del_imgs_no_xml():
     '''
     删除没有xml的图片
     '''
-    data_home = "F:/Datasets/securety/PageRec/原始标注数据/2022-09-29-全场景-labeled-1021"
+    data_home = "F:/Datasets/securety/PageRec/原始标注数据/2022-09-29-全场景-labeled-1026"
     dirs = os.listdir(data_home)
     for dir in dirs:
         dir_path = os.path.join(data_home,dir)
@@ -42,15 +43,15 @@ def gen_train_val():
     生成训练验证数据集
     '''
     data_home = "F:/Datasets/securety/PageRec"
-    origin_data_home = data_home+"/原始标注数据/2022-09-29-全场景-labeled-1021"
-    trainval_data_home = data_home+"/trainval_data/text_ico_2020-10-21"
-    test_data_home = data_home+"/test_data"
+    origin_data_home = data_home+"/原始标注数据/2022-09-29-全场景-labeled-1026"
+    trainval_data_home = data_home+"/trainval_data/text_ico_2020-10-26_add"
+    # test_data_home = data_home+"/test_data"
     make_dirs(trainval_data_home)
-    make_dirs(test_data_home)
+    # make_dirs(test_data_home)
 
     f_train = open(trainval_data_home+"/train.txt","w",encoding="utf-8")
     f_val = open(trainval_data_home+"/val.txt","w",encoding="utf-8")
-    f_test = open(test_data_home+"/test.txt",'w',encoding="utf-8")
+    # f_test = open(test_data_home+"/test.txt",'w',encoding="utf-8")
 
     dirs = os.listdir(origin_data_home)
     for dir in tqdm(dirs):
@@ -66,26 +67,26 @@ def gen_train_val():
             dst_img_path = os.path.join(trainval_data_home+"/train_val/imgs/"+img)
             dst_xml_path = os.path.join(trainval_data_home+'/train_val/xmls/'+img_name+".xml")
             # 测试集
-            make_dirs(test_data_home+"/test/imgs")
-            make_dirs(test_data_home+"/test/xmls")
-            dst_test_img_path = os.path.join(test_data_home+"/test/imgs/"+img)
-            dst_test_xml_path = os.path.join(test_data_home+'/test/xmls/'+img_name+".xml")
-            if random.random() > 0.2:
+            # make_dirs(test_data_home+"/test/imgs")
+            # make_dirs(test_data_home+"/test/xmls")
+            # dst_test_img_path = os.path.join(test_data_home+"/test/imgs/"+img)
+            # dst_test_xml_path = os.path.join(test_data_home+'/test/xmls/'+img_name+".xml")
+            if random.random() > 0:
                 shutil.copy(img_path,dst_img_path)
                 shutil.copy(xml_path,dst_xml_path)
                 f_train.write(f"{dst_img_path} {dst_xml_path}\r")
-            elif random.random() > 0.5:
+            else:
                 shutil.copy(img_path,dst_img_path)
                 shutil.copy(xml_path,dst_xml_path)
                 f_val.write(f"{dst_img_path} {dst_xml_path}\r")
-            else:
-                shutil.copy(img_path,dst_test_img_path)
-                shutil.copy(xml_path,dst_test_xml_path)
-                f_test.write(f"{dst_test_img_path} {dst_test_xml_path}\r")
+            # else:
+            #     shutil.copy(img_path,dst_test_img_path)
+            #     shutil.copy(xml_path,dst_test_xml_path)
+            #     f_test.write(f"{dst_test_img_path} {dst_test_xml_path}\r")
 
     f_train.close()
     f_val.close()
-    f_test.close()
+    # f_test.close()
 
 def read_xml(xml_path):
     '''
@@ -103,9 +104,9 @@ def calculate_calss_nums():
     '''
     统计训练数据中每个类别的个数
     '''
-    data_home = "F:/Datasets/securety/PageRec/test_data"
+    data_home = "F:/Datasets/securety/PageRec/trainval_data/text_ico_2020-10-26"
 
-    trainf = open(os.path.join(data_home,"test.txt"))
+    trainf = open(os.path.join(data_home,"train.txt"))
     lines = trainf.readlines()
 
     class_nums = {}
@@ -561,10 +562,107 @@ def gen_text_ico_imgs():
         # print()
     f_train.close()
 
+def get_new_labeled_data():
+    '''
+    所有数据中提取出新标注的数据
+    '''
+    train_data_path = "F:/Datasets/securety/PageRec/trainval_data/text_ico_2020-10-21/train_val/imgs"
+    test_data_path = "F:/Datasets/securety/PageRec/test_data/test/imgs"
+    train_imgs =[os.path.splitext(img)[0] for img in os.listdir(train_data_path) if os.path.splitext(img)[-1] in [".png",".jpg"]] 
+    test_imgs =[os.path.splitext(img)[0] for img in os.listdir(test_data_path) if os.path.splitext(img)[-1] in [".png",".jpg"]] 
+    all_imgs = train_imgs+test_imgs
+    # f_val = open("F:/Datasets/securety/PageRec/trainval_data/text_ico_2020-10-21/val.txt",encoding="utf-8")
+    # val_lines = f_val.readlines()
+    # val_imgs = [os.path.splitext(os.path.basename(val_line.split(" ")[0]))[0] for val_line in val_lines]
+    new_data_path = "F:/Datasets/securety/PageRec/trainval_data/text_ico_2020-10-26_add/train_val/imgs"
+    new_imgs = [img for img in os.listdir(new_data_path) if os.path.splitext(img)[-1] in [".png",".jpg"]] 
+    for img in tqdm(new_imgs):
+        img_name = os.path.splitext(img)[0]
+        if img_name in test_imgs:
+            os.remove(new_data_path+"/"+img)
+            os.remove(new_data_path.replace("img","xml")+"/"+img_name+".xml")
+
+
+def gen_traintxt():
+    '''
+    查找train_val中属于train的文件，写成train.txt
+    '''
+    data_home = "F:/Datasets/securety/PageRec/trainval_data/text_ico_2020-10-26"
+    imgs_path = os.path.join(data_home,"train_val","imgs")
+    xmls_path = os.path.join(data_home,"train_val","xmls")
+
+    imgs = os.listdir(imgs_path)
+    f_val = open("F:/Datasets/securety/PageRec/trainval_data/text_ico_2020-10-21/val.txt",encoding="utf-8")
+    val_lines = f_val.readlines()
+    val_imgs = [os.path.splitext(os.path.basename(val_line.split(" ")[0]))[0] for val_line in val_lines]
+    f_train = open("F:/Datasets/securety/PageRec/trainval_data/text_ico_2020-10-26/train.txt","w",encoding="utf-8")
+    for img in imgs:
+        img_name = os.path.splitext(img)[0]
+        if img_name not in val_imgs:
+            line = "train_val/imgs/"+img_name+".jpg " +"train_val/xmls/"+img_name+".xml\r"
+            f_train.write(line)
+    f_train.close()
+
+def check_label():
+    '''
+    将根据标注框裁剪出图片来，检查标注是否正确
+    '''
+    data_home = "F:/Datasets/securety/PageRec/trainval_data/text_ico_2020-10-26"
+    output_path = data_home+"/label_output"
+    make_dirs(output_path)
+    xmls_path = os.path.join(data_home,"train_val","xmls")
+    xmls = os.listdir(xmls_path)
+    for xml in tqdm(xmls):
+        xml_name = os.path.splitext(xml)[0]
+        xml_path = os.path.join(xmls_path,xml)
+        img_path = os.path.join(xmls_path.replace("xml","img"),xml_name+".jpg")
+        img = np.array(Image.open(img_path).convert("RGB"))[:,:,::-1]
+        h,w,c = img.shape
+        tree,root = read_xml(xml_path)
+        objs = tree.findall('object')
+        for i,obj in enumerate(objs):
+            cls_name = obj.find('name').text
+            cls_path = os.path.join(output_path,cls_name)
+            make_dirs(cls_path)
+            bndbox = obj.find('bndbox')
+            xmin = int(float(bndbox.find('xmin').text))
+            ymin = int(float(bndbox.find('ymin').text))
+            xmax = int(float(bndbox.find('xmax').text))
+            ymax = int(float(bndbox.find('ymax').text))
+
+            obj_save_path = os.path.join(cls_path,xml_name+"_"+str(i)+".jpg")
+            obj_img = img[ymin:ymax,xmin:xmax]
+            cv2.imwrite(obj_save_path,obj_img)
+
+def get_text_label_file():
+    '''
+    去除ico标签，只保留text标签
+    '''
+    # data_home = "F:/Datasets/securety/PageRec/trainval_data/text_ico_2020-10-26"
+    data_home = "F:/Datasets/securety/PageRec/test_data/"
+    xmls_path = os.path.join(data_home,"test","xmls")
+    new_xmls_path = os.path.join(data_home,"test","xmls_text")
+    make_dirs(new_xmls_path)
+    xmls = os.listdir(xmls_path)
+    for xml in tqdm(xmls):
+        xml_name = os.path.splitext(xml)[0]
+        xml_path = os.path.join(xmls_path,xml)
+        tree,root = read_xml(xml_path)
+        objs = tree.findall('object')
+        for i,obj in enumerate(objs):
+            cls_name = obj.find('name').text
+            if cls_name == "ico":
+                root.remove(obj)
+        tree.write(os.path.join(new_xmls_path,xml_name+".xml")) 
 
 
 if __name__ == "__main__":
     # del_imgs_no_xml()
     # gen_train_val()
-    calculate_calss_nums()
+    # calculate_calss_nums()
     # gen_text_ico_imgs()
+    # get_new_labeled_data()
+    # gen_traintxt()
+    # check_valid()
+    # check_label()
+    get_text_label_file()

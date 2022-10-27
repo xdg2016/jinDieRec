@@ -164,13 +164,16 @@ class PPrecPredictor:
         try:
             # 裁剪
             im = get_rotate_crop_image(im, box.astype(np.float32))
-            partImg = self.preprocess(im.astype(np.float32))
-            result = self.predict_rbg(partImg)  ##识别的文本
+            if im.shape[0] > 2 and im.shape[1] > 2:
+                partImg = self.preprocess(im.astype(np.float32))
+                result = self.predict_rbg(partImg)  ##识别的文本
+            else:
+                result = [("",0)]
         except Exception as e:
             print(traceback.format_exc())
             result = [("",0)]
         simPred,prob = result[0]
-        return self.npbox2box(box),simPred
+        return self.npbox2box(box),simPred,prob
 
     def __call__(self,texts_list,use_mp = False, process_num = 1):
         
@@ -211,6 +214,6 @@ class PPrecPredictor:
             used_boxes = set([box[1] for box in datas])         # 做了识别的框
             text_boxes = set([box[0] for box in texts_list])    # 所有框
             rest_boxes = list(text_boxes - used_boxes)          # 剩余未做识别的框
-            results.extend([(self.npbox2box(np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])),"") for x,y,bb_w,bb_h in rest_boxes])
+            results.extend([(self.npbox2box(np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])),"",0) for x,y,bb_w,bb_h in rest_boxes])
 
         return results
