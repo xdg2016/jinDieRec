@@ -17,18 +17,6 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 from config import *
-from PIL import Image
-from multiprocessing.dummy import Pool as ThreadPool
-
-try:
-    import sahi
-    from sahi.slicing import slice_image
-except Exception as e:
-    print(
-        'sahi not found, plaese install sahi. '
-        'for example: `pip install sahi`, see https://github.com/obss/sahi.'
-    )
-    raise e
 
 def multiclass_nms(bboxs, num_classes, match_threshold=0.6, match_metric='ios'):
     final_boxes = []
@@ -162,28 +150,6 @@ class PicoDet():
 
         # 缩放到推理尺寸
         img, im_shape, scale_factor = self.resize_image(srcimg)
-        img = img[:,:,::-1]
-        # 归一化
-        img = self._normalize(img)
-        # BGR转RGB
-        img = img[:,:,::-1]
-        # 维度转置+添加维度
-        blob = np.expand_dims(np.transpose(img, (2, 0, 1)), axis=0).astype(np.float32)
-        inputs_dict = {
-            'im_shape': im_shape,
-            'image': blob,
-            'scale_factor': scale_factor
-        }
-        inputs_name = [a.name for a in self.net.get_inputs()]
-        net_inputs = {k: inputs_dict[k] for k in inputs_name}
-        return net_inputs
-    
-    def slice_preprocess(self,srcimg):
-        '''
-        数据预处理（没有归一化这一步）
-        '''
-        # 缩放到推理尺寸
-        img, im_shape, scale_factor = self.resize_image(srcimg)
         # 维度转置+添加维度
         blob = np.expand_dims(np.transpose(img, (2, 0, 1)), axis=0).astype(np.float32)
         inputs_dict = {
@@ -226,92 +192,5 @@ class PicoDet():
                 result_list.append(result)
         except Exception as e:
             print(e)
-
-        return result_list
-
-    def run_slice(self,srcimg):
-        '''
-        多线程的原子操作
-        '''
-        net_inputs = self.slice_preprocess(srcimg)
-        outs = self.net.run(None, net_inputs)
-        boxes = np.array(outs[0])
-        return boxes
-
-    def det_onnx_slice(self,
-                        srcimg,
-                        slice_size=[640,640],
-                        overlap_ratio=[0.25,0.25]):
-        ''' 
-        目标检测模型推理接口(自动切图拼图)
-
-        Args:
-            srcimg 原始数据
-            slice_size: 裁剪尺寸
-            overlap_ratio: 块之间的重叠比例
-        Returns:
-            result_list 检测结果列表
-        '''
-        # 切分原图
-        slice_image_result = sahi.slicing.slice_image(
-                image=Image.fromarray(srcimg),
-                slice_height=slice_size[0],
-                slice_width=slice_size[1],
-                overlap_height_ratio=overlap_ratio[0],
-                overlap_width_ratio=overlap_ratio[1])
-        sub_img_num = len(slice_image_result)
-        batch_image_list = [slice_image_result.images[_ind] for _ind in range(sub_img_num)]
-
-        result_list = []
-        try:
-            # 多块并行检测
-            trs = time.time()
-            pool = ThreadPool(processes = process_num)
-            pred_boxes = pool.map(self.run_slice, batch_image_list)
-            pool.close()
-            pool.join()
-            tre = time.time()
-            # print("det run cost: ", tre - trs)
-
-            # 坐标映射
-            merged_bboxs = []
-            for _ind in range(sub_img_num):
-                # 保留置信度大于阈值的检测框
-                expect_boxes = (pred_boxes[_ind][:, 1] > self.prob_threshold) & (pred_boxes[_ind][:, 0] > -1)
-                pred_boxes[_ind] = pred_boxes[_ind][expect_boxes, :]
-
-                shift_amount = slice_image_result.starting_pixels[_ind]
-                pred_boxes[_ind][:, 2:4] = pred_boxes[_ind][:, 2:4] + shift_amount
-                pred_boxes[_ind][:, 4:6] = pred_boxes[_ind][:, 4:6] + shift_amount
-                merged_bboxs.append(pred_boxes[_ind])
-            # nms后处理
-            final_boxes = multiclass_nms(np.concatenate(merged_bboxs),
-                                        self.num_classes,
-                                        match_threshold= self.nms_threshold,
-                                        match_metric="ios"
-                                        )
-            outs = np.concatenate(final_boxes)
-            # print(len(outs))
-            # print("det nms cost: ", time.time()-tre)
-
-            # 过滤检测结果：置信度大于阈值，索引大于-1
-            expect_boxes = (outs[:, 1] > self.prob_threshold) & (outs[:, 0] > -1)
-            result_boxes = outs[expect_boxes, :]
-            
-            for i in range(result_boxes.shape[0]):
-                class_id, conf = int(result_boxes[i, 0]), result_boxes[i, 1]
-                # 因为切图拼图模型训练时，0是ico,1是text,所以这里需要反过来
-                class_id = 1- class_id
-                class_name = self.classes[class_id]
-                xmin, ymin, xmax, ymax = int(result_boxes[i, 2]), int(result_boxes[
-                    i, 3]), int(result_boxes[i, 4]), int(result_boxes[i, 5])
-                result = {"classid":class_id,
-                        "classname":class_name,
-                        "confidence":conf,
-                        "box":[xmin,ymin,xmax,ymax]}
-                result_list.append(result)
-        except Exception as e:
-            print(e)
-            return []
 
         return result_list

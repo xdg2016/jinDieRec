@@ -49,7 +49,7 @@ if __name__ == "__main__":
 
         # 页面元素检测（文本+图标）
         results = page_items_rec(img,
-                                 slice=True,
+                                 slice=False,
                                  use_mp = True,
                                  process_num = 10
                                 )
@@ -63,7 +63,7 @@ if __name__ == "__main__":
         # # 显示文字和图标
         for i,result in enumerate(results["texts"]):
             box,text,conf = result
-            # print(text)
+            print(text)
             cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(0,0,255),2)
         for i,result in enumerate(results["icos"]):
             box = result 
