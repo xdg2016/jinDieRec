@@ -7,8 +7,8 @@ from crnn import pp_pred
 import config
 from det.picodet import PicoDet
 
-log = logging.getLogger()
-log.setLevel("DEBUG")
+#log = logging.getLogger()
+#log.setLevel("DEBUG")
 
 '''
 金蝶财务软件文字和图标识别
@@ -317,24 +317,24 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True,mergebox = False):
     # 边缘检测
     edges = edge_detect(gray,10)
     t2 = time.time()
-    logging.debug(f"edge_detect cost: {t2-t1}")
+    # logging.debug(f"edge_detect cost: {t2-t1}")
    
     # 连通域检测和去除
     edges = remove_connectRegion(edges)
     t3 = time.time()
-    logging.debug(f"remove_connectRegion cost: {t3-t2}")
+    # logging.debug(f"remove_connectRegion cost: {t3-t2}")
     
     # 闭运算连接相邻文字区域，减少块数
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(ksize,ksize))
     if close:
         edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel)
     t4 = time.time()
-    logging.debug(f"morph close cost: {t4-t3}")
+    # logging.debug(f"morph close cost: {t4-t3}")
     
     # 查找剩余轮廓
     contours,hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     t5 = time.time()
-    logging.debug(f"findContours cost: {t5-t4}")
+    # logging.debug(f"findContours cost: {t5-t4}")
 
     boxes = []
     # 过滤box
@@ -350,7 +350,7 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True,mergebox = False):
         boxes.append(box)
     
     t6 = time.time()
-    logging.debug(f"filter boxes cost: {t6-t5}")
+    # logging.debug(f"filter boxes cost: {t6-t5}")
 
     # 拼接相邻的box
     if mergebox:
@@ -361,7 +361,7 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True,mergebox = False):
                 break
             old_boxes = boxes
         t7 = time.time()
-        logging.debug(f"merge boxes cost: {t7-t6}")
+        # logging.debug(f"merge boxes cost: {t7-t6}")
 
     return boxes
 
@@ -392,7 +392,8 @@ def page_items_rec(img,slice = False, use_mp = config.use_mp, process_num = conf
     
     # 获取所有的元素位置（文本+图标）
     t1 = time.time()
-    det_results = det_net.det_onnx(img)
+    #det_results = det_net.det_onnx(img)
+    det_results = det_net.det_vino(img)
     logging.debug(f"det cost: {time.time()-t1}")
     texts = []
     icos = []
@@ -453,67 +454,67 @@ def py_nms(dets, thresh):
   return keep
 
 def get_template(color_image,color_img_temp,template_threshold=0.95):
-  '''
-  color_image:匹配的原始图（大图）
-  color_img_temp:匹配用的模板图（小图）
-  template_threshold:模板匹配的置信度（0.1-0.99之间）
-  '''
-  img_gray = cv2.cvtColor(color_image,cv2.COLOR_BGR2GRAY)
-  template_img = cv2.cvtColor(color_img_temp,cv2.COLOR_BGR2GRAY)
-  h, w = template_img.shape[:2]
-  res = cv2.matchTemplate(img_gray, template_img, cv2.TM_CCOEFF_NORMED)
- 
-  loc = np.where(res >= template_threshold)#大于模板阈值的目标坐标
-  score = res[res >= template_threshold]#大于模板阈值的目标置信度
-  #将模板数据坐标进行处理成左上角、右下角的格式
-  xmin = np.array(loc[1])
-  ymin = np.array(loc[0])
-  xmax = xmin+w
-  ymax = ymin+h
-  xmin = xmin.reshape(-1,1)#变成n行1列维度
-  xmax = xmax.reshape(-1,1)#变成n行1列维度
-  ymax = ymax.reshape(-1,1)#变成n行1列维度
-  ymin = ymin.reshape(-1,1)#变成n行1列维度
-  score = score.reshape(-1,1)#变成n行1列维度
-  data_hlist = []
-  data_hlist.append(xmin)
-  data_hlist.append(ymin)
-  data_hlist.append(xmax)
-  data_hlist.append(ymax)
-  data_hlist.append(score)
-  data_hstack = np.hstack(data_hlist)#将xmin、ymin、xmax、yamx、scores按照列进行拼接
-  thresh = 0.3#NMS里面的IOU交互比阈值
-
-  keep_dets = py_nms(data_hstack, thresh)
- 
-  dets = data_hstack[keep_dets]#最终的nms获得的矩形框
-  arr = np.array(dets)
-
-  arr = arr[np.argsort(arr[:,1])]
-  return arr
-
-
-# def get_template(color_image,color_img_temp,conf = 0.7):
-#     '''
-#     img_gray:待检测的灰度图片格式
-#     template_img:模板小图，也是灰度化了
-#     template_threshold:模板匹配的置信度
-#     '''
-#     image = cv2.cvtColor(color_image,cv2.COLOR_BGR2GRAY)
-#     img_temp = cv2.cvtColor(color_img_temp,cv2.COLOR_BGR2GRAY)
-#     height,width= img_temp.shape
-#     # cv2.imwrite("temp_qq.jpg",img_temp)
-#     results = cv2.matchTemplate(image, img_temp, 5)
-
-#     location = []
-#     score = []
-#     for y in range(len(results)):
-#         for x in range(len(results[y])):
-#             if results[y][x] > conf:
-#                 # cv2.rectangle(image, (x, y), (x + width, y + height), (0, 0, 255), 2)
-#                 loc = [(x, y), (x + width, y + height)]
-#                 location.append(loc)
-#                 score.append(results[y][x])
+    '''
+    color_image:匹配的原始图（大图）
+    color_img_temp:匹配用的模板图（小图）
+    template_threshold:模板匹配的置信度（0.1-0.99之间）
+    '''
+    img_gray = cv2.cvtColor(color_image,cv2.COLOR_BGR2GRAY)
+    template_img = cv2.cvtColor(color_img_temp,cv2.COLOR_BGR2GRAY)
+    h, w = template_img.shape[:2]
+    res = cv2.matchTemplate(img_gray, template_img, cv2.TM_CCOEFF_NORMED)
     
+    loc = np.where(res >= template_threshold)#大于模板阈值的目标坐标
+    score = res[res >= template_threshold]#大于模板阈值的目标置信度
+    #将模板数据坐标进行处理成左上角、右下角的格式
+    xmin = np.array(loc[1])
+    ymin = np.array(loc[0])
+    xmax = xmin+w
+    ymax = ymin+h
+    xmin = xmin.reshape(-1,1)#变成n行1列维度
+    xmax = xmax.reshape(-1,1)#变成n行1列维度
+    ymax = ymax.reshape(-1,1)#变成n行1列维度
+    ymin = ymin.reshape(-1,1)#变成n行1列维度
+    score = score.reshape(-1,1)#变成n行1列维度
+    data_hlist = []
+    data_hlist.append(xmin)
+    data_hlist.append(ymin)
+    data_hlist.append(xmax)
+    data_hlist.append(ymax)
+    data_hlist.append(score)
+    data_hstack = np.hstack(data_hlist)#将xmin、ymin、xmax、yamx、scores按照列进行拼接
+    thresh = 0.3#NMS里面的IOU交互比阈值
 
-#     return location
+    keep_dets = py_nms(data_hstack, thresh)
+    
+    dets = data_hstack[keep_dets]#最终的nms获得的矩形框
+    arr = np.array(dets)
+
+    arr = arr[np.argsort(arr[:,1])]
+    return arr
+
+
+    # def get_template(color_image,color_img_temp,conf = 0.7):
+    #     '''
+    #     img_gray:待检测的灰度图片格式
+    #     template_img:模板小图，也是灰度化了
+    #     template_threshold:模板匹配的置信度
+    #     '''
+    #     image = cv2.cvtColor(color_image,cv2.COLOR_BGR2GRAY)
+    #     img_temp = cv2.cvtColor(color_img_temp,cv2.COLOR_BGR2GRAY)
+    #     height,width= img_temp.shape
+    #     # cv2.imwrite("temp_qq.jpg",img_temp)
+    #     results = cv2.matchTemplate(image, img_temp, 5)
+
+    #     location = []
+    #     score = []
+    #     for y in range(len(results)):
+    #         for x in range(len(results[y])):
+    #             if results[y][x] > conf:
+    #                 # cv2.rectangle(image, (x, y), (x + width, y + height), (0, 0, 255), 2)
+    #                 loc = [(x, y), (x + width, y + height)]
+    #                 location.append(loc)
+    #                 score.append(results[y][x])
+        
+
+    #     return location
