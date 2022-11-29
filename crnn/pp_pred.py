@@ -1,4 +1,5 @@
 import onnxruntime as ort
+import onnx
 import numpy as np
 import time
 import traceback
@@ -6,6 +7,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 import cv2
 
 from crnn.util import get_rotate_crop_image
+from crnn.CRNN import softmax
 
 class PPrecPredictor:
     '''
@@ -17,7 +19,11 @@ class PPrecPredictor:
         self.out_names = out_names        
         self.target_h = target_h
         self.batch_num = batch_num
-        self.sess = ort.InferenceSession(model_path)
+
+        onnx_model = onnx.load(model_path)
+        # for output in self.out_names:
+        #     onnx_model.graph.output.extend([onnx.ValueInfoProto(name=output)])
+        self.sess = ort.InferenceSession(onnx_model.SerializeToString())
  
         self.character_str = []
         character_dict_path = keys_txt_path
@@ -141,8 +147,10 @@ class PPrecPredictor:
         预测
         """
         t1 = time.time()
-        preds = self.sess.run(self.out_names, {self.in_names: im.astype(np.float32)}) # 12ms
-        # print("run cost: ",time.time()-t1)
+        t = 1
+        for i in range(t):
+            preds = self.sess.run(self.out_names, {self.in_names: im.astype(np.float32)}) # 12ms
+        # print("run cost: ",(time.time()-t1)/t)
         preds = preds[0]
         # preds = softmax(preds)
         preds_idx = preds.argmax(axis=2)
@@ -194,16 +202,19 @@ class PPrecPredictor:
                     continue
                 x,y,bb_w,bb_h = box 
                 box = np.array([[x,y],[x+bb_w,y],[x+bb_w,y+bb_h],[x,y+bb_h]])
-                # 裁剪
-                # partImg_array = get_rotate_crop_image(im, box.astype(np.float32))
-                partImg = self.preprocess(im.astype(np.float32))
                 try:
-                    result = self.predict_rbg(partImg)  ##识别的文本
+                    # 裁剪
+                    im = get_rotate_crop_image(im, box.astype(np.float32))
+                    if im.shape[0] > 2 and im.shape[1] > 2:
+                        partImg = self.preprocess(im.astype(np.float32))
+                        result = self.predict_rbg(partImg)  ##识别的文本
+                    else:
+                        result = [("",0)]
                 except Exception as e:
                     print(traceback.format_exc())
-                    continue
+                    result = [("",0)]
                 simPred,prob = result[0]
-                results.append([self.npbox2box(box),simPred])
+                results.append([self.npbox2box(box),simPred,prob])
         else:
             # 多线程方法二（更快）
             datas = [(im,box) for box,im in texts_list if box[2] > 3 and box[3] > 3 and box[2] / box[3] < 50]

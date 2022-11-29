@@ -6,7 +6,7 @@ from urllib.request import DataHandler
 import cv2
 from tqdm import tqdm
 import xml.etree.ElementTree as ET
-from pageItemRec import get_text_icos
+from pageItemRec import get_text_icos,det_net
 import numpy as np
 from PIL import Image
 import xml.dom.minidom
@@ -117,54 +117,76 @@ def rename_img_xml(data_home,dir):
         # new_img_path = os.path.join(imgs_path,dir+"_"+xml.replace("xml","png"))
         # os.rename(old_img_path,new_img_path)
 
+def xyxy2xywh(box):
+    xmin,ymin,xmax,ymax = box
+    x = int(float(xmin))
+    y = int(float(ymin))
+    w = int(float(xmax-xmin))+1
+    h = int(float(ymax-ymin))+1
+    box = x,y,w,h
+    return box
 
 if __name__ == "__main__":
     
-    # data_home = "F:/Datasets/securety/页面识别/全场景图标和文本检测"
-    data_home = "F:/Datasets/securety/PageRec/all/origin"
-    rename_img_xml(data_home,"wps")
+    data_home = "F:/Datasets/securety/PageRec/原始标注数据/2022-11-01-全场景截图"
+    # data_home = "F:/Datasets/securety/PageRec/all/origin"
+    # rename_img_xml(data_home,"wps")
 
-    # dirs = os.listdir(data_home)
-    # for dir in dirs:
-    #     dir_path = os.path.join(data_home,dir)
-    #     imgs_path = os.path.join(dir_path,"imgs")
-    #     xmls_path = os.path.join(dir_path,"xmls")
-    #     make_dirs(imgs_path)
-    #     make_dirs(xmls_path)
-    #     imgs = [f for f in os.listdir(dir_path) if os.path.splitext(f)[-1] in [".jpg",".png"]]
-    #     for img in tqdm(imgs):
-    #         img_name = dir+"_"+os.path.splitext(img)[0]
-    #         # 原始图片路径
-    #         src_im_path = os.path.join(dir_path,img)
-    #         # 目标图片和xml保存路径
-    #         img_path = os.path.join(imgs_path,img_name+".jpg")
-    #         xml_path = os.path.join(xmls_path,img_name+".xml")
-    #         try:
-    #             im = np.array(Image.open(src_im_path).convert("RGB"))           # 直接转RGB
-    #         except:
-    #             continue
-    #         h,w,c = im.shape
+    dirs = os.listdir(data_home)
+    for dir in dirs:
+        dir_path = os.path.join(data_home,dir)
+        imgs_path = os.path.join(dir_path,"imgs")
+        xmls_path = os.path.join(dir_path,"xmls")
+        if os.path.exists(xmls_path):
+            print("folder exists!")
+            continue
+        make_dirs(imgs_path)
+        make_dirs(xmls_path)
+        imgs = [f for f in os.listdir(dir_path) if os.path.splitext(f)[-1] in [".jpg",".png"]]
+        for img in tqdm(imgs):
+            img_name = dir+"_"+os.path.splitext(img)[0]
+            # 原始图片路径
+            src_im_path = os.path.join(dir_path,img)
+            # 目标图片和xml保存路径
+            img_path = os.path.join(imgs_path,img_name+".jpg")
+            xml_path = os.path.join(xmls_path,img_name+".xml")
+            try:
+                im = np.array(Image.open(src_im_path).convert("RGB"))           # 直接转RGB
+            except:
+                continue
+            h,w,c = im.shape
 
-    #         # 调用第一版的检测和分类
-    #         texts,icos = get_text_icos(im)
-    #         tag_names = ["text"]*len(texts) + ["ico"] * len(icos)
-    #         box_list = [[box[0],box[1],box[0]+box[2],box[1]+box[3]] for box,_ in texts] + [[box[0],box[1],box[0]+box[2],box[1]+box[3]] for box in icos]
-    #         try:
-    #             # 保存进xml文件
-    #             write_xml(folder=dir,
-    #                     img_name=img_name+".jpg",
-    #                     path=img_path,
-    #                     img_width=w,
-    #                     img_height=h,
-    #                     tag_num=len(texts)+len(icos),
-    #                     tag_names=tag_names,
-    #                     box_list=box_list,
-    #                     save_path = xmls_path,
-    #                     )
-    #             # 移动图片
-    #             shutil.move(src_im_path,img_path)
-    #         except:
-    #             continue
+            # 调用第二版的检测和分类
+            # texts,icos = get_text_icos(im)
+            det_results = det_net.det_onnx(im)
+            texts = []
+            icos = []
+            for item in det_results:
+                cls_name = item["classname"]
+                box = xyxy2xywh(item["box"])
+                # box = item["box"]
+                if cls_name == "text":
+                    texts.append((box,img))
+                else:
+                    icos.append(box)
+            tag_names = ["text"]*len(texts) + ["ico"] * len(icos)
+            box_list = [[box[0],box[1],box[0]+box[2],box[1]+box[3]] for box,_ in texts] + [[box[0],box[1],box[0]+box[2],box[1]+box[3]] for box in icos]
+            try:
+                # 保存进xml文件
+                write_xml(folder=dir,
+                        img_name=img_name+".jpg",
+                        path=img_path,
+                        img_width=w,
+                        img_height=h,
+                        tag_num=len(texts)+len(icos),
+                        tag_names=tag_names,
+                        box_list=box_list,
+                        save_path = xmls_path,
+                        )
+                # 移动图片
+                shutil.move(src_im_path,img_path)
+            except:
+                continue
             
 
 

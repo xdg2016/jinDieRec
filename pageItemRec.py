@@ -33,15 +33,10 @@ ocr_predict = pp_pred.PPrecPredictor(config.model_path,
 #                                  config.cls_out_names)
 
 det_net = PicoDet(model_pb_path = config.det_model_path,
+                slice_model_pb_path= config.slice_det_model_path,
                 label_path = config.label_path,
                 prob_threshold = config.confThreshold,
                 nms_threshold =config.nmsThreshold)
-# 切图拼图检测
-slice_det_net = PicoDet(model_pb_path = config.slice_det_model_path,
-                label_path = config.label_path,
-                prob_threshold = config.confThreshold,
-                nms_threshold =config.nmsThreshold)
-
 
 def edge_detect(img,thresh = 10):
     '''
@@ -328,24 +323,24 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True,mergebox = False):
     # 边缘检测
     edges = edge_detect(gray,10)
     t2 = time.time()
-    logging.debug(f"edge_detect cost: {t2-t1}")
+    # logging.debug(f"edge_detect cost: {t2-t1}")
    
     # 连通域检测和去除
     edges = remove_connectRegion(edges)
     t3 = time.time()
-    logging.debug(f"remove_connectRegion cost: {t3-t2}")
+    # logging.debug(f"remove_connectRegion cost: {t3-t2}")
     
     # 闭运算连接相邻文字区域，减少块数
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(ksize,ksize))
     if close:
         edges = cv2.morphologyEx(edges,op=cv2.MORPH_CLOSE,kernel=kernel)
     t4 = time.time()
-    logging.debug(f"morph close cost: {t4-t3}")
+    # logging.debug(f"morph close cost: {t4-t3}")
     
     # 查找剩余轮廓
     contours,hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     t5 = time.time()
-    logging.debug(f"findContours cost: {t5-t4}")
+    # logging.debug(f"findContours cost: {t5-t4}")
 
     boxes = []
     # 过滤box
@@ -361,7 +356,7 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True,mergebox = False):
         boxes.append(box)
     
     t6 = time.time()
-    logging.debug(f"filter boxes cost: {t6-t5}")
+    # logging.debug(f"filter boxes cost: {t6-t5}")
 
     # 拼接相邻的box
     if mergebox:
@@ -372,7 +367,7 @@ def get_item_boxs(img,r = 1,ksize = 3,close = True,mergebox = False):
                 break
             old_boxes = boxes
         t7 = time.time()
-        logging.debug(f"merge boxes cost: {t7-t6}")
+        # logging.debug(f"merge boxes cost: {t7-t6}")
 
     return boxes
 
@@ -403,11 +398,16 @@ def page_items_rec(img,slice = False, use_mp = config.use_mp, process_num = conf
     
     # 获取所有的元素位置（文本+图标）
     t1 = time.time()
+    t = 1
     if slice:
-        det_results = slice_det_net.det_onnx_slice(img)
+        # det_results = det_net.det_onnx_slice(img)
+        det_results = det_net.det_vino_slice(img)
     else:
-        det_results = det_net.det_onnx(img)
-    logging.debug(f"det cost: {time.time()-t1}")
+        t = 1
+        for i in range(t):
+            # det_results = det_net.det_onnx(img)
+            det_results = det_net.det_vino(img)
+    logging.debug(f"det cost: {(time.time()-t1)/t}")
     texts = []
     icos = []
     for item in det_results:
@@ -438,7 +438,7 @@ def get_text_icos(img,r=config.r,ksize = 3,mergebox = config.merge_box, use_mp =
     # 获取所有的元素位置（文本+图标）
     boxes = get_item_boxs(img, r, ksize = ksize, mergebox = mergebox)
     t2 = time.time()
-    logging.debug(f"get {len(boxes)} boxes cost: {t2 - t1}")
+    # logging.debug(f"get {len(boxes)} boxes cost: {t2 - t1}")
 
     # # 图标和文本分类
     # cls_results = text_classifier(img,boxes,process_num=process_num)
