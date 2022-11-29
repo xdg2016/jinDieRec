@@ -528,26 +528,27 @@ class PicoDet():
                 output = self.net_vino.infer_new_request({0: img,1:scale_factor}) # 这里要加上缩放因子
             t2 = time.time()
             print("infer cost:",(t2-t1)/t)
+            outs = list(output.values())
 
             # nms
-            outs = list(output.values())
-            num_outs = int(len(outs) / 2)
-            decode_boxes = []
-            select_scores = []
-            for out_idx in range(num_outs):
-                decode_boxes.append(outs[out_idx])
-                select_scores.append(outs[out_idx + num_outs])
-            outs = self.nms(decode_boxes, select_scores)
-            t3 = time.time()
-            print("nms cost:",t3-t2)
+            # num_outs = int(len(outs) / 2)
+            # decode_boxes = []
+            # select_scores = []
+            # for out_idx in range(num_outs):
+            #     decode_boxes.append(outs[out_idx])
+            #     select_scores.append(outs[out_idx + num_outs])
+            # outs = self.nms(decode_boxes, select_scores)
+            # t3 = time.time()
+            # print("nms cost:",t3-t2)
             
             # 过滤检测结果：置信度大于阈值，索引大于-1
+            outs = np.array(outs[0])
             expect_boxes = (outs[:, 1] > self.prob_threshold) & (outs[:, 0] > -1)
             result_boxes = outs[expect_boxes, :]
             
             # 合并检测框
             result_boxes = merge_boxes2(result_boxes)
-            print("merge cost:",time.time()-t3)
+            print("merge cost:",time.time()-t1)
             
             for i in range(result_boxes.shape[0]):
                 class_id, conf = int(result_boxes[i, 0]), result_boxes[i, 1]

@@ -31,7 +31,8 @@ keys_txt_path = os.path.join(cur_dir,"models/ppocr_keys_v1.txt")
 # 文本检测onnx
 # det_model_path = os.path.join(cur_dir,"models/ppyoloe_crn_s_p2_alpha_80e_text_small3_b1_wonms_sim.onnx")
 # 文本检测openvino
-det_model_path = os.path.join(cur_dir,"models/ppyoloe_crn_s_p2_alpha_80e_text_small3_b1_wonms_sim.onnx")
+# det_model_path = os.path.join(cur_dir,"models/ppyoloe_crn_s_p2_alpha_80e_text_small3_b1_wonms_sim.onnx")
+det_model_path = os.path.join(cur_dir,"models/ppyoloe_crn_s_p2_alpha_80e_text_small3.onnx")
 # 类别列表
 label_path = os.path.join(cur_dir,"det/label_list_text_ico.txt")
 # 显示置信度阈值
