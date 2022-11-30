@@ -17,9 +17,16 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 from config import *
-from openvino.runtime import Core
+try:
+    from openvino.runtime import Core
+except Exception as e:
+    print("The current platform does not support this library !")
+    pass
 
 def multiclass_nms(bboxs, num_classes, match_threshold=0.6, match_metric='ios'):
+    '''
+    多目标nms，用于切图拼图合并
+    '''
     final_boxes = []
     for c in range(num_classes):
         idxs = bboxs[:, 0] == c
@@ -406,8 +413,8 @@ class PicoDet():
         '''
         openvino模型初始化
         '''
-        ie = Core()
         try:
+            ie = Core()
             net = ie.read_model(model_path)
             input_layer = net.input(0)
             input_shape = input_layer.partial_shape
@@ -480,11 +487,17 @@ class PicoDet():
 
         result_list = []
         try:
+            t1 = time.time()
             outs = self.net.run(None, net_inputs)
+            t2 = time.time()
+            print("infer cost:",t2-t1)
             outs = np.array(outs[0])
             # 过滤检测结果：置信度大于阈值，索引大于-1
             expect_boxes = (outs[:, 1] > self.prob_threshold) & (outs[:, 0] > -1)
             result_boxes = outs[expect_boxes, :]
+            t_m = time.time()
+            result_boxes = merge_boxes2(result_boxes)
+            print("merge cost:",time.time()-t_m)
             
             for i in range(result_boxes.shape[0]):
                 class_id, conf = int(result_boxes[i, 0]), result_boxes[i, 1]
@@ -547,8 +560,9 @@ class PicoDet():
             result_boxes = outs[expect_boxes, :]
             
             # 合并检测框
+            tm = time.time()
             result_boxes = merge_boxes2(result_boxes)
-            print("merge cost:",time.time()-t1)
+            print("merge cost:",time.time()-tm)
             
             for i in range(result_boxes.shape[0]):
                 class_id, conf = int(result_boxes[i, 0]), result_boxes[i, 1]
@@ -562,5 +576,14 @@ class PicoDet():
                 result_list.append(result)
         except Exception as e:
             print(e)
-        
         return result_list
+
+    def infer(self,img):
+        # self.net_vino = None
+        if self.net_vino is None:
+            print("infer by onnx ...")
+            det_results = self.det_onnx(img)
+        else:
+            print("infer by openvino ...")
+            det_results = self.det_vino(img)
+        return det_results

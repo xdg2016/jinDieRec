@@ -392,8 +392,8 @@ def page_items_rec(img,slice = False, use_mp = config.use_mp, process_num = conf
     
     # 获取所有的元素位置（文本+图标）
     t1 = time.time()
-    #det_results = det_net.det_onnx(img)
-    det_results = det_net.det_vino(img)
+
+    det_results = det_net.infer(img)
     logging.debug(f"det cost: {time.time()-t1}")
     texts = []
     icos = []
