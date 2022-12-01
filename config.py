@@ -32,10 +32,19 @@ keys_txt_path = os.path.join(cur_dir,"models/ppocr_keys_v1.txt")
 # det_model_path = os.path.join(cur_dir,"models/ppyoloe_crn_s_p2_alpha_80e_text_small3_b1_wonms_sim.onnx")
 # 文本检测openvino
 # det_model_path = os.path.join(cur_dir,"models/ppyoloe_crn_s_p2_alpha_80e_text_small3_b1_wonms_sim.onnx")
-det_model_path = os.path.join(cur_dir,"models/ppyoloe_crn_s_p2_alpha_80e_text_small3.onnx")
+det_model_path = os.path.join(cur_dir,"models/ppyoloe_crn_s_p2_alpha_80e_text_small3_wonms_anyhw.onnx")
 # 类别列表
 label_path = os.path.join(cur_dir,"det/label_list_text_ico.txt")
 # 显示置信度阈值
 confThreshold = 0.4
 # nms阈值
 nmsThreshold = 0.6
+# 默认推理尺寸
+det_h = 640
+det_w = 640
+# 标准图片尺寸
+default_imgh = 1080
+default_imgw = 1920
+# 缩放比例
+resize_ratio_h = det_h / default_imgh
+resize_ratio_w = det_w / default_imgw

@@ -444,15 +444,19 @@ class PicoDet():
         Returns:
             keep_ratio 是否保持原图宽高比
         '''
-        top, left, newh, neww = 0, 0, self.input_shape[0], self.input_shape[1]
         origin_shape = srcimg.shape[:2]
+        neww,newh = det_w,det_h
+        if origin_shape[0] > default_imgh or origin_shape[1] > default_imgw:
+            newh = int((origin_shape[0]*resize_ratio_h)/32) * 32
+            neww = int((origin_shape[1]*resize_ratio_w)/32) * 32
+
         im_scale_y = newh / float(origin_shape[0])
         im_scale_x = neww / float(origin_shape[1])
         img_shape = np.array([
-            [float(self.input_shape[0]), float(self.input_shape[1])]
+            [float(newh), float(neww)]
         ]).astype('float32')
         scale_factor = np.array([[im_scale_y, im_scale_x]]).astype('float32')
-        img = cv2.resize(srcimg,  tuple(self.input_shape), interpolation=2)
+        img = cv2.resize(srcimg,  (neww,newh), interpolation=2)
 
         return img, img_shape, scale_factor
 
@@ -487,11 +491,24 @@ class PicoDet():
 
         result_list = []
         try:
-            t1 = time.time()
-            outs = self.net.run(None, net_inputs)
-            t2 = time.time()
-            print("infer cost:",t2-t1)
-            outs = np.array(outs[0])
+            ts = time.time()
+            t = 1
+            for i in range(t):
+                outs = self.net.run(None, net_inputs)
+            print("infer cost:",(time.time()-ts)/t)
+
+            # nms
+            num_outs = int(len(outs) / 2)
+            decode_boxes = []
+            select_scores = []
+            for out_idx in range(num_outs):
+                decode_boxes.append(outs[out_idx])
+                select_scores.append(outs[out_idx + num_outs])
+            outs = self.nms(decode_boxes, select_scores)
+            t3 = time.time()
+            print("infer+nms cost:",t3-ts)
+
+            
             # 过滤检测结果：置信度大于阈值，索引大于-1
             expect_boxes = (outs[:, 1] > self.prob_threshold) & (outs[:, 0] > -1)
             result_boxes = outs[expect_boxes, :]
@@ -515,11 +532,16 @@ class PicoDet():
         return result_list
 
     def vino_preprocess(self,img):
-        n,c, H,W = list(self.net_vino.inputs[0].shape)
-        im_scale_y = H / float(img.shape[0])
-        im_scale_x = W / float(img.shape[1])
+        # n,c, H,W = list(net.inputs[0].shape)
+        origin_shape = img.shape[:2]
+        neww,newh = det_w,det_h
+        if origin_shape[0] > default_imgh or origin_shape[1] > default_imgw:
+            newh = int((origin_shape[0]*resize_ratio_h)/32) * 32
+            neww = int((origin_shape[1]*resize_ratio_w)/32) * 32
+        im_scale_y = newh / float(img.shape[0])
+        im_scale_x = neww / float(img.shape[1])
         scale_factor = np.array([[im_scale_y, im_scale_x]]).astype('float32')
-        img = cv2.resize(img, (W, H), interpolation=2)
+        img = cv2.resize(img, (neww, newh), interpolation=2)
         # img = img[:,:,::-1]
         # img = self._normalize(img)
         # # 转回RGB
@@ -543,19 +565,19 @@ class PicoDet():
             print("infer cost:",(t2-t1)/t)
             outs = list(output.values())
 
-            # nms
-            # num_outs = int(len(outs) / 2)
-            # decode_boxes = []
-            # select_scores = []
-            # for out_idx in range(num_outs):
-            #     decode_boxes.append(outs[out_idx])
-            #     select_scores.append(outs[out_idx + num_outs])
-            # outs = self.nms(decode_boxes, select_scores)
-            # t3 = time.time()
-            # print("nms cost:",t3-t2)
+            # # nms ,模型内部不带nms时，需执行这一段
+            num_outs = int(len(outs) / 2)
+            decode_boxes = []
+            select_scores = []
+            for out_idx in range(num_outs):
+                decode_boxes.append(outs[out_idx])
+                select_scores.append(outs[out_idx + num_outs])
+            outs = self.nms(decode_boxes, select_scores)
+            t3 = time.time()
+            print("infer+nms cost:",t3-t1)
             
             # 过滤检测结果：置信度大于阈值，索引大于-1
-            outs = np.array(outs[0])
+            # outs = np.array(outs[0])                                                # 模型内部不带nms时，需注释这一句
             expect_boxes = (outs[:, 1] > self.prob_threshold) & (outs[:, 0] > -1)
             result_boxes = outs[expect_boxes, :]
             
