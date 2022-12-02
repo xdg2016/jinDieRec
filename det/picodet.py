@@ -20,7 +20,11 @@ import onnxruntime as ort
 from config import *
 from PIL import Image
 from multiprocessing.dummy import Pool as ThreadPool
-from openvino.runtime import Core
+try:
+    from openvino.runtime import Core
+except Exception as e:
+    print("The current platform does not support this library !")
+    pass
 
 try:
     import sahi
@@ -371,8 +375,8 @@ class PicoDet():
         '''
         openvino模型初始化
         '''
-        ie = Core()
         try:
+            ie = Core()
             net = ie.read_model(model_path)
             input_layer = net.input(0)
             input_shape = input_layer.partial_shape
@@ -403,14 +407,19 @@ class PicoDet():
         Returns:
             keep_ratio 是否保持原图宽高比
         '''
-        top, left, newh, neww = 0, 0, self.input_shape[0], self.input_shape[1]
+        origin_shape = srcimg.shape[:2]
+        neww,newh = det_w,det_h
+        if origin_shape[0] > default_imgh or origin_shape[1] > default_imgw:
+            newh = int((origin_shape[0]*resize_ratio_h)/32) * 32
+            neww = int((origin_shape[1]*resize_ratio_w)/32) * 32
+
         if slice:
              newh, neww = self.input_shape_slice[0], self.input_shape_slice[1]
-        origin_shape = srcimg.shape[:2]
+        
         im_scale_y = newh / float(origin_shape[0])
         im_scale_x = neww / float(origin_shape[1])
         img_shape = np.array([
-            [float(self.input_shape[0]), float(self.input_shape[1])]
+            [float(newh), float(neww)]
         ]).astype('float32')
         scale_factor = np.array([[im_scale_y, im_scale_x]]).astype('float32')
         img = cv2.resize(srcimg,  (neww,newh), interpolation=2)
@@ -482,19 +491,19 @@ class PicoDet():
             print("infer cost:",(time.time()-ts)/t)
 
             # nms
-            # num_outs = int(len(outs) / 2)
-            # decode_boxes = []
-            # select_scores = []
-            # for out_idx in range(num_outs):
-            #     decode_boxes.append(outs[out_idx])
-            #     select_scores.append(outs[out_idx + num_outs])
-            # outs = self.nms(decode_boxes, select_scores)
-            # t3 = time.time()
-            # print("infer+nms cost:",t3-ts)
+            num_outs = int(len(outs) / 2)
+            decode_boxes = []
+            select_scores = []
+            for out_idx in range(num_outs):
+                decode_boxes.append(outs[out_idx])
+                select_scores.append(outs[out_idx + num_outs])
+            outs = self.nms(decode_boxes, select_scores)
+            t3 = time.time()
+            print("infer+nms cost:",t3-ts)
 
             
             # 过滤检测结果：置信度大于阈值，索引大于-1
-            outs = np.array(outs[0])                                                # 模型内部不带nms时，需注释这一句
+            # outs = np.array(outs[0])                                                # 模型内部不带nms时，需注释这一句
             expect_boxes = (outs[:, 1] > self.prob_threshold) & (outs[:, 0] > -1)
             result_boxes = outs[expect_boxes, :]
             t_m = time.time()
@@ -517,14 +526,19 @@ class PicoDet():
         return result_list
 
     def vino_preprocess(self,img,net):
-        n,c, H,W = list(net.inputs[0].shape)
-        im_scale_y = H / float(img.shape[0])
-        im_scale_x = W / float(img.shape[1])
+        # n,c, H,W = list(net.inputs[0].shape)
+        origin_shape = img.shape[:2]
+        neww,newh = det_w,det_h
+        if origin_shape[0] > default_imgh or origin_shape[1] > default_imgw:
+            newh = int((origin_shape[0]*resize_ratio_h)/32) * 32
+            neww = int((origin_shape[1]*resize_ratio_w)/32) * 32
+        im_scale_y = newh / float(img.shape[0])
+        im_scale_x = neww / float(img.shape[1])
         scale_factor = np.array([[im_scale_y, im_scale_x]]).astype('float32')
-        img = cv2.resize(img, (W, H), interpolation=2)
+        img = cv2.resize(img, (neww, newh), interpolation=2)
         # 转成BGR
         img = img[:,:,::-1]
-        img = self._normalize(img)  # ppyoloe模型不需要normalize,但是picodet需要
+        # img = self._normalize(img)  # ppyoloe模型不需要normalize,但是picodet需要
         # 转回RGB
         img = img[:,:,::-1]
         # 维度转置+添加维度
@@ -547,18 +561,18 @@ class PicoDet():
             outs = list(output.values())
 
             # # nms ,模型内部不带nms时，需执行这一段
-            # num_outs = int(len(outs) / 2)
-            # decode_boxes = []
-            # select_scores = []
-            # for out_idx in range(num_outs):
-            #     decode_boxes.append(outs[out_idx])
-            #     select_scores.append(outs[out_idx + num_outs])
-            # outs = self.nms(decode_boxes, select_scores)
-            # t3 = time.time()
-            # print("infer+nms cost:",t3-t1)
+            num_outs = int(len(outs) / 2)
+            decode_boxes = []
+            select_scores = []
+            for out_idx in range(num_outs):
+                decode_boxes.append(outs[out_idx])
+                select_scores.append(outs[out_idx + num_outs])
+            outs = self.nms(decode_boxes, select_scores)
+            t3 = time.time()
+            print("infer+nms cost:",t3-t1)
             
             # 过滤检测结果：置信度大于阈值，索引大于-1
-            outs = np.array(outs[0])                                                # 模型内部不带nms时，需注释这一句
+            # outs = np.array(outs[0])                                                # 模型内部不带nms时，需注释这一句
             expect_boxes = (outs[:, 1] > self.prob_threshold) & (outs[:, 0] > -1)
             result_boxes = outs[expect_boxes, :]
             t3 = time.time()
@@ -776,5 +790,14 @@ class PicoDet():
         except Exception as e:
             print(e)
             return []
-
         return result_list
+
+    def infer(self,img):
+        # self.net_vino = None
+        if self.net_vino is None:
+            print("infer by onnx ...")
+            det_results = self.det_onnx(img)
+        else:
+            print("infer by openvino ...")
+            det_results = self.det_vino(img)
+        return det_results

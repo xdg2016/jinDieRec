@@ -49,22 +49,19 @@ cls_out_names = ["softmax_0.tmp_0"]
 # 模型路径（pp-yolo-E）
 # det_model_path = "models/ppyoloe_crn_s_300e_coco_text_ico_1026_350e.onnx"         # 推理尺寸640x640, 约80ms
 # det_model_path = "models/ppyoloe_crn_s_300e_coco_text_ico_1026_350e_768.onnx"     # 推理尺寸768x768, 约100ms
-# det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_1028.onnx"               # 加上P2层特征,约90ms
+# det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_ico_1028.onnx"               # 加上P2层特征,约90ms
 # det_model_path = "models/ppyoloe_crn_s_p234_alpha_80e_text_ico_1028.onnx"         # 只用P2,P3,P4层特征, 约76ms
 # det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_ico_small3.onnx"
 # det_model_path = "models/ppyoloe_plus_sod_crn_s_80e_visdrone_text_ico.onnx"
-# det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_ico_1122.onnx"
-
-# 文本检测onnx
-# det_model_path = "models\ppyoloe_crn_s_p2_alpha_80e_text_1028_wonms_sim.onnx"
-# det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_small3_b1_wonms_sim.onnx"
+# det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_ico_1122_wonms_anyhw.onnx"
 
 # 文本检测openvino
 # det_model_path = "models\ppyoloe_crn_s_p2_alpha_80e_text_1028_wonms_sim.onnx"
 # det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_small3_b1_wonms_sim.onnx"
 # det_model_path = "models/picodet_xs_416_coco_lcnet_text_wonms.onnx"
 # det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_1028.onnx"
-det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_small3.onnx"
+# det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_small3.onnx"
+det_model_path = "models/ppyoloe_crn_s_p2_alpha_80e_text_small3_wonms_anyhw.onnx"
 
 # 自动切图+拼图模型路径
 # slice_det_model_path = "models/ppyoloe_crn_s_300e_sliced_visdrone_640_025_text_ico.onnx"     # 推理尺寸640x640
@@ -76,3 +73,12 @@ label_path = "det/label_list_text_ico.txt"
 confThreshold = 0.4
 # nms阈值
 nmsThreshold = 0.6
+# 默认推理尺寸
+det_h = 640
+det_w = 640
+# 标准图片尺寸
+default_imgh = 1080
+default_imgw = 1920
+# 缩放比例
+resize_ratio_h = det_h / default_imgh
+resize_ratio_w = det_w / default_imgw

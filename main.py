@@ -28,7 +28,8 @@ if __name__ == "__main__":
     # data_home = "F:/Datasets/securety/PageRec/原始标注数据/测试/jindie/image1"
     # data_home = "F:/temp"
     # data_home = "F:/temp/all"
-    data_home = "F:/temp/all"
+    # data_home = "F:/temp/all"
+    data_home = "F:/temp/all_1"
     # data_home = "F:/Datasets/securety/PageRec/test_data/test_sliced"
 
     imgs = [img for img in os.listdir(data_home) if os.path.splitext(img)[-1] in [".jpg",".png",".webp"]]
@@ -52,7 +53,7 @@ if __name__ == "__main__":
 
         # 页面元素检测（文本+图标）
         results = page_items_rec(img,
-                                slice=True,
+                                slice=False,
                                 use_mp = True,
                                 process_num = 10
                                 )
@@ -60,26 +61,27 @@ if __name__ == "__main__":
         print(f"API cost: {trec-t1}")
         times.append(trec - t1)
         boxes.append(len(results["texts"])+len(results["icos"]))
+        # boxes.append(len(results["texts"]))
         
         img_save_dir = "F:/Datasets/OCR/cls/ori_imgs2"
 
         # # 显示文字和图标
-        # for i,result in enumerate(results["texts"]):
-        #     box,text,conf = result
-        #     # print(text)
-        #     color = (random.randint(0,255),random.randint(0,255),random.randint(0,255))
-        #     cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(0,0,255),2)
-        # for i,result in enumerate(results["icos"]):
-        #     box = result 
-        #     cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(255,0,0),2)
+        for i,result in enumerate(results["texts"]):
+            box,text,conf = result
+            # print(text)
+            color = (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+            cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(0,0,255),2)
+        for i,result in enumerate(results["icos"]):
+            box = result 
+            cv2.rectangle(draw_img2,(box[0],box[1]),(box[0]+box[2],box[1]+box[3]),(255,0,0),2)
 
         # cv2.namedWindow(f'result',0)
         # cv2.imshow(f"result",draw_img2)
         # cv2.waitKey(0)
 
-        # 保存文字和图标
-        # cv2.imwrite(f"result2/{item}",draw_img2)
-        # cv2.imwrite(f"result_chrome/{item}",draw_img2)
+        # # 保存文字和图标
+        cv2.imwrite(f"result/{item}",draw_img2)
+        cv2.imwrite(f"result_chrome/{item}",draw_img2)
         
     print(f"平均耗时：{np.mean(times)}")
-    print(f"框数：{boxes}")
+    print(f"平均框数：{np.mean(boxes)}")

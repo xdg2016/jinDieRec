@@ -24,7 +24,7 @@ class PPrecPredictor:
         # for output in self.out_names:
         #     onnx_model.graph.output.extend([onnx.ValueInfoProto(name=output)])
         self.sess = ort.InferenceSession(onnx_model.SerializeToString())
- 
+
         self.character_str = []
         character_dict_path = keys_txt_path
         use_space_char = True
